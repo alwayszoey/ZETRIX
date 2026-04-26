@@ -3,13 +3,12 @@ import {
   Search, ShieldAlert, Download, X, RefreshCcw, LayoutGrid, Layers, 
   Archive, Settings, FileText, Check, Zap, Menu, ArrowLeft, 
   Home, HelpCircle, Share2, Facebook, Instagram, MessageCircle,
-  Play, ChevronRight, Loader2, Youtube, Send, MessageSquare, Sun, Moon, Lock, UserPlus, LogOut, Users, Eye, Star, Flame, ShoppingCart, Clock
+  Play, ChevronRight, Loader2, Youtube, Send, MessageSquare, Sun, Moon, Lock, UserPlus, LogOut, Users, Eye, Star, Flame, ShoppingCart, Sparkles, ShoppingBag
 } from 'lucide-react';
 import { resourcesData, ResourceItem } from './data';
 import { motion, AnimatePresence } from 'motion/react';
 import ReCAPTCHA from "react-google-recaptcha";
 import { translations } from './translations';
-import { siteConfig } from './config';
 import { AuthModal } from './AuthModal';
 import { ProfileModal } from './ProfileModal';
 
@@ -38,17 +37,25 @@ const StatsCard = ({ icon: Icon, title, value, unit }: { icon: any, title: strin
   </div>
 );
 
+// ============================================================================
+// 📌 COMPONENT: PromoPopup (แก้ไข Popup แจ้งเตือน/โฆษณา ตอนเข้าเว็บได้ที่นี่)
+// ============================================================================
 function PromoPopup() {
   const [isOpen, setIsOpen] = useState(false);
   const [dontShow1Hour, setDontShow1Hour] = useState(false);
 
   useEffect(() => {
+    // Only show if they've visited before (so welcome screen doesn't overlap) or just wait until welcome state is done
     const hiddenUntil = localStorage.getItem('hidePromoUntil');
     if (hiddenUntil && Date.now() < parseInt(hiddenUntil, 10)) {
       return;
     }
-    const timer = setTimeout(() => setIsOpen(true), 1500);
-    return () => clearTimeout(timer);
+    
+    // Slight delay so it poops up nicely after page load
+    const t = setTimeout(() => {
+      setIsOpen(true);
+    }, 1500);
+    return () => clearTimeout(t);
   }, []);
 
   const handleClose = () => {
@@ -61,78 +68,66 @@ function PromoPopup() {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-5 overflow-auto">
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, transition: { duration: 0.3 } }}
+          className="fixed inset-0 z-[99999] bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center p-5 overflow-auto"
+        >
           <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={handleClose}
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-          />
-          
-          <div className="relative flex flex-col items-center">
-            <motion.div 
-              initial={{ scale: 0.5, opacity: 0, rotate: -5, y: 50 }}
-              animate={{ scale: 1, opacity: 1, rotate: 0, y: 0 }}
-              exit={{ scale: 0.5, opacity: 0, rotate: 5, y: 50 }}
-              transition={{ type: 'spring', damping: 20, stiffness: 200 }}
-              className="relative shadow-2xl rounded-2xl overflow-hidden border border-white/10 group"
+            initial={{ scale: 0.8, y: 50, opacity: 0, rotate: -5 }}
+            animate={{ scale: 1, y: 0, opacity: 1, rotate: 0, transition: { type: "spring", bounce: 0.5, duration: 0.6 } }}
+            exit={{ scale: 0.8, y: -50, opacity: 0, rotate: 5, transition: { duration: 0.3, type: "tween", ease: "easeInOut" } }}
+            className="relative shadow-2xl rounded-2xl max-w-full"
+          >
+            <a href="https://discord.gg/hSuBbnwWZY" target="_blank" rel="noopener noreferrer" className="block outline-none ring-offset-2 ring-offset-black focus-visible:ring-2 focus-visible:ring-brand rounded-2xl">
+              <img src="https://img2.pic.in.th/never.png" alt="Join Discord" className="block w-[500px] h-[500px] max-w-[90vw] max-h-[80vh] object-cover rounded-2xl" />
+            </a>
+            
+            <button 
+              aria-label="ปิด" 
+              onClick={handleClose} 
+              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-[#ffffff] text-[#000000] border-none text-base font-bold cursor-pointer flex items-center justify-center shadow-[0_4px_12px_rgba(0,0,0,0.3)] hover:scale-110 active:scale-95 transition-transform z-10"
             >
-              <a href="https://discord.gg/KcKcPM43c2" target="_blank" rel="noopener noreferrer" className="block">
-                <img 
-                  src="https://img2.pic.in.th/never.png" 
-                  alt="Promotion" 
-                  className="block w-[500px] h-[500px] max-w-[90vw] max-h-[70vh] object-cover rounded-2xl group-hover:scale-[1.02] transition-transform duration-500" 
-                />
-              </a>
-              <button 
-                aria-label="ปิด" 
-                onClick={handleClose} 
-                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white text-black border-0 text-lg font-bold cursor-pointer flex items-center justify-center shadow-lg hover:bg-brand hover:text-white transition-all transform hover:rotate-90 active:scale-90 z-20"
-              >
-                ✕
-              </button>
-            </motion.div>
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
 
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              transition={{ delay: 0.3 }}
-              className="mt-6 flex items-center gap-4 bg-white/10 backdrop-blur-xl px-5 py-3 rounded-2xl border border-white/20 text-white shadow-2xl"
-            >
-              <label className="inline-flex items-center gap-2 cursor-pointer select-none group">
-                <input 
-                  type="checkbox" 
-                  checked={dontShow1Hour} 
-                  onChange={(e) => setDontShow1Hour(e.target.checked)} 
-                  className="w-4 h-4 rounded border-white/30 bg-transparent text-brand focus:ring-brand" 
-                />
-                <span className="text-sm font-medium group-hover:text-brand transition-colors">ไม่แสดงอีก 1 ชั่วโมง</span>
-              </label>
-              <div className="w-[1px] h-4 bg-white/20" />
-              <button 
-                onClick={handleClose} 
-                className="text-sm font-bold hover:text-brand transition-colors"
-              >
-                ปิดทั้งหมด
-              </button>
-            </motion.div>
-          </div>
-        </div>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0, transition: { delay: 0.3 } }}
+            exit={{ opacity: 0, y: 20, transition: { duration: 0.2 } }}
+            className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[100000] bg-[#000000]/20 backdrop-blur-[24px] px-5 py-3 rounded-2xl border border-[#ffffff]/20 flex items-center gap-4 text-[#ffffff] text-[13px] flex-wrap w-max max-w-[calc(100%-40px)] shadow-[0_8px_32px_0_rgba(0,0,0,0.3)]"
+          >
+            <label className="inline-flex items-center gap-2 cursor-pointer select-none whitespace-nowrap">
+              <input type="checkbox" checked={dontShow1Hour} onChange={(e) => setDontShow1Hour(e.target.checked)} className="accent-brand w-4 h-4 cursor-pointer" />
+              <span className="font-medium text-[#ffffff]/90">ไม่แสดงอีก 1 ชั่วโมง</span>
+            </label>
+            <div className="w-[1px] h-4 bg-[#ffffff]/20 mx-1"></div>
+            <button onClick={handleClose} className="px-4 py-1.5 bg-[#ffffff]/20 hover:bg-[#ffffff]/30 text-[#ffffff] border border-[#ffffff]/20 rounded-xl text-[13px] font-semibold cursor-pointer active:scale-95 transition-all whitespace-nowrap shadow-sm">
+              ปิดทั้งหมด
+            </button>
+          </motion.div>
+        </motion.div>
       )}
     </AnimatePresence>
   );
 }
 
+// ============================================================================
+// 📌 COMPONENT: App (ส่วนหลักของเว็บไซต์ รวบรวมหน้าต่างๆ ไว้ที่นี่)
+// ============================================================================
 export default function App() {
-  const [lang, setLang] = useState<AppLang>('th');
+  const [lang, setLang] = useState<AppLang | null>(null);
   const [isAppLoading, setIsAppLoading] = useState(true);
 
-  const [langSelectState, setLangSelectState] = useState<'selecting' | 'recaptcha' | 'checking' | 'done'>('done');
+  const [welcomeState, setWelcomeState] = useState<'welcome' | 'checking' | 'done'>('done');
   
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
+  // ==========================================
+  // 📌 ตัวแปร State ต่างๆ ในระบบ
+  // ==========================================
   // ====== AUTH STATES ======
   const [authModalType, setAuthModalType] = useState<'login' | 'register' | null>(null);
   const [currentUser, setCurrentUser] = useState<{ id: string, username: string, email: string, avatarUrl?: string } | null>(null);
@@ -161,8 +156,12 @@ export default function App() {
       localStorage.setItem('appTheme', 'light');
     }
 
-    setLang('th');
-    setLangSelectState('done');
+    const hasVisited = localStorage.getItem('hasVisitedStore');
+    if (hasVisited) {
+      setWelcomeState('done');
+    } else {
+      setWelcomeState('welcome');
+    }
 
     // Check Auth Session
     const localToken = localStorage.getItem('authToken');
@@ -185,17 +184,22 @@ export default function App() {
       });
     }
 
-    // Fetch initial app stats
-    fetch('/api/stats')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          const newStats = { users: data.users, views: data.views, downloads: data.downloads };
-          setAppStats(newStats);
-          localStorage.setItem('cachedStats', JSON.stringify(newStats));
-        }
-      })
-      .catch(err => console.error("Failed to fetch stats:", err));
+    // Fetch initial app stats and setup polling for real-time updates
+    const fetchStats = () => {
+      fetch('/api/stats')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            const newStats = { users: data.users, views: data.views, downloads: data.downloads };
+            setAppStats(newStats);
+            localStorage.setItem('cachedStats', JSON.stringify(newStats));
+          }
+        })
+        .catch(err => { /* quiet fail */ });
+    };
+
+    fetchStats();
+    const statsInterval = setInterval(fetchStats, 3000);
 
     // Increment view counter if not viewed this session
     if (!sessionStorage.getItem('hasViewed')) {
@@ -217,7 +221,9 @@ export default function App() {
     // Simulate loading to ensure everything is ready
     setTimeout(() => {
       setIsAppLoading(false);
-    }, 100);
+    }, 1000);
+
+    return () => clearInterval(statsInterval);
   }, []);
 
   const handleLogout = () => {
@@ -239,13 +245,13 @@ export default function App() {
   };
 
   const t = (key: keyof typeof translations) => {
-    return (translations as any)[key] || '';
+    return translations[key] || key;
   };
 
   const getLocalized = (val: any): string => {
     if (!val) return '';
     if (typeof val === 'string') return val;
-    return val.th || val.vi || '';
+    return val['th'] || val['vi'] || '';
   };
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -279,23 +285,6 @@ export default function App() {
   const [isNetworkChecking, setIsNetworkChecking] = useState(false);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [downloadKey, setDownloadKey] = useState<string | null>(null);
-  const [itemStats, setItemStats] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    // Fetch real-time item specific purchases/downloads
-    fetch('/api/stats/items')
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.items) {
-          const statsMap: Record<string, number> = {};
-          data.items.forEach((it: any) => {
-            statsMap[it.itemId] = it.downloads || 0;
-          });
-          setItemStats(statsMap);
-        }
-      })
-      .catch(err => console.error("Failed to fetch item stats:", err));
-  }, []);
 
   // Auto-redirect to home grid if user types in search
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -453,24 +442,16 @@ export default function App() {
         return;
       }
       
-      // Increment item-specific download stat
-      fetch(`/api/stats/download/${selectedItem.id}`, { method: 'POST' })
+      // Increment download stat
+      fetch('/api/stats/download', { method: 'POST' })
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            setItemStats(prev => ({
-              ...prev,
-              [selectedItem.id]: data.downloads
-            }));
-            
-            // Still update global stats conceptually by fetching them again to be safe
-            fetch('/api/stats').then(r=>r.json()).then(st => {
-              if (st.success) {
-                const newStats = { users: st.users, views: st.views, downloads: st.downloads };
-                setAppStats(newStats);
-                localStorage.setItem('cachedStats', JSON.stringify(newStats));
-              }
-            });
+             setAppStats(prev => {
+               const newStats = { ...prev, downloads: data.downloads };
+               localStorage.setItem('cachedStats', JSON.stringify(newStats));
+               return newStats;
+             });
           }
         })
         .catch(err => console.error("Failed to increment download:", err));
@@ -538,12 +519,11 @@ export default function App() {
     };
   }, []);
 
-  const handleLanguageSelect = (selected: AppLang) => {
-    setLang(selected);
-    localStorage.setItem('appLang', selected);
-    setLangSelectState('checking');
+  const handleEnterStore = () => {
+    localStorage.setItem('hasVisitedStore', 'true');
+    setWelcomeState('checking');
     setTimeout(() => {
-      setLangSelectState('done');
+      setWelcomeState('done');
     }, 1500); // Wait 1.5s reading the welcome message
   };
 
@@ -551,8 +531,76 @@ export default function App() {
     // Kept to prevent breaking just in case, but no longer used for language select
   };
 
-  if (langSelectState !== 'done' && false) {
-    // Hidden selection layer
+  // ============================================================================
+  // 📌 1. หน้าต่างต้อนรับก่อนเข้าเว็บ (Welcome Screen)
+  // ============================================================================
+  if (welcomeState !== 'done') {
+    return (
+      <div className="fixed inset-0 overflow-hidden bg-bg-app z-[999] flex flex-col justify-center items-center p-4">
+        {/* Floating Emojis Background */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+          {Array.from({ length: 25 }).map((_, i) => (
+            <motion.div
+              key={i}
+              className="absolute opacity-20 text-3xl sm:text-4xl"
+              initial={{ 
+                top: '-10%', 
+                left: `${Math.random() * 100}%`, 
+                rotate: 0 
+              }}
+              animate={{ 
+                top: '110%', 
+                left: `${Math.random() * 100}%`, 
+                rotate: Math.random() * 360 
+              }}
+              transition={{ 
+                duration: 6 + Math.random() * 6, 
+                repeat: Infinity, 
+                ease: 'linear', 
+                delay: Math.random() * 5 
+              }}
+            >
+              {EMOTICONS[Math.floor(Math.random() * EMOTICONS.length)]}
+            </motion.div>
+          ))}
+        </div>
+
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.8, y: 50 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.6, type: 'spring', bounce: 0.5 }}
+          className="bg-card-bg/95 backdrop-blur-xl max-w-md w-full p-8 rounded-[32px] text-center shadow-2xl relative z-10 border border-border-subtle"
+        >
+          <img src="https://img2.pic.in.th/IMG_0083.png" alt="Logo" className="h-16 mx-auto mb-6 object-contain drop-shadow-md" />
+          
+          <AnimatePresence mode="wait">
+            {welcomeState === 'welcome' && (
+              <motion.div key="welcome" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }}>
+                <h2 className="text-[22px] sm:text-[26px] font-bold text-text-main mb-2 tracking-tight">ยินดีต้อนรับสู่ Zorix Shop</h2>
+                <h2 className="text-[15px] sm:text-[16px] font-normal text-text-muted mb-8 leading-relaxed">
+                  ศูนย์รวมซอร์สโค้ดและสคริปต์คุณภาพสูง พร้อมใช้สำหรับโปรเจกต์ของคุณ
+                </h2>
+                
+                <button 
+                  onClick={handleEnterStore}
+                  className="w-full flex items-center justify-center gap-3 py-4 rounded-[16px] bg-brand hover:brightness-110 border-2 border-transparent text-white transition-all text-[16px] font-bold cursor-pointer shadow-lg shadow-brand/20 active:scale-[0.98]"
+                >
+                  เข้าสู่ Zorix Shop <ChevronRight className="w-5 h-5 opacity-80" />
+                </button>
+              </motion.div>
+            )}
+
+            {welcomeState === 'checking' && (
+              <motion.div key="checking" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="py-8">
+                <Loader2 className="w-12 h-12 text-brand animate-spin mx-auto mb-6" />
+                <h2 className="text-[22px] font-bold text-text-main mb-2">กำลังเตรียมข้อมูลร้านค้า...</h2>
+                <p className="text-[15px] font-medium text-text-muted">โปรดรอสักครู่</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </div>
+    );
   }
 
   // Define translated categories array
@@ -567,6 +615,9 @@ export default function App() {
     );
   }
 
+  // ============================================================================
+  // 📌 RENDER - โครงสร้าง HTML ทั้งหมดของเว็บ
+  // ============================================================================
   return (
     <div className="flex flex-col h-[100dvh] overflow-hidden bg-bg-app text-text-main font-sans selection:bg-brand selection:text-white">
       
@@ -582,7 +633,7 @@ export default function App() {
           onClick={() => { setCurrentView('home'); setSelectedItem(null); }} 
           className="flex items-center gap-3 shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
         >
-          <img src={siteConfig.logoUrl} alt="Logo" className="h-9 sm:h-10 object-contain drop-shadow-sm" />
+          <img src="https://img2.pic.in.th/IMG_0083.png" alt="Logo" className="h-9 sm:h-10 object-contain drop-shadow-sm" />
         </div>
         
         {/* Center Search Bar */}
@@ -619,7 +670,7 @@ export default function App() {
       </nav>
 
       {/* ANNOUNCEMENT BANNER */}
-      <div className="bg-brand overflow-hidden h-8 relative flex items-center shrink-0 w-full">
+      <div className="bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 overflow-hidden h-8 relative flex items-center shrink-0 w-full">
         <div className="animate-marquee flex items-center h-full absolute whitespace-nowrap px-4">
           <div className="shrink-0 flex items-center whitespace-nowrap">
             <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5 shrink-0 mx-3 text-white" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
@@ -723,6 +774,7 @@ export default function App() {
                   </button>
                 </>
               )}
+
             </motion.div>
           </>
         )}
@@ -737,7 +789,10 @@ export default function App() {
           {/* ---------------------------------------------------- */}
           {/* PAGE 1: RESOURCES GRID */}
           {/* ---------------------------------------------------- */}
-          {currentView === 'home' && (
+          {/* ============================================================================ */}
+        {/* 📌 2. หน้าแรก (Home View) */}
+        {/* ============================================================================ */}
+        {currentView === 'home' && (
             <motion.div 
               key="grid-view"
               initial={{ opacity: 0, y: 10 }}
@@ -761,11 +816,11 @@ export default function App() {
                     alt="Carousel" 
                     fetchPriority="high" 
                     loading="eager" 
-                    width="1200" 
-                    height="400" 
+                    width="2000" 
+                    height="600" 
                     decoding="async" 
-                    className="w-full h-auto object-cover object-center max-h-[100px] sm:max-h-[140px] md:max-h-[180px] lg:max-h-[220px]" 
-                    src="https://img2.pic.in.th/Banner-Discord.png" 
+                    className="w-full h-auto aspect-[10/3] object-cover object-center" 
+                    src="https://img1.pic.in.th/images/zorixshop_20260426124700.png" 
                   />
                 </motion.div>
 
@@ -797,7 +852,7 @@ export default function App() {
                   <StatsCard 
                     icon={Download} 
                     title={t('statsDownloads') || 'Lượt tải'}
-                    value={appStats.downloads.toLocaleString()}
+                    value={(appStats.downloads).toLocaleString()}
                     unit={t('unitTimes') || 'lần'}
                   />
                 </motion.div>
@@ -832,7 +887,7 @@ export default function App() {
                         // Pick an image
                         let imgPath = "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1640&auto=format&fit=crop";
                         if (tab === 'ALL') {
-                          imgPath = "https://img2.pic.in.th/Banner-Discord.png"
+                          imgPath = "https://i.postimg.cc/8zb4Q7C4/2000x600-20260425003051.png"
                         } else {
                           const match = resourcesData.find(i => i.category === tab);
                           if (match) imgPath = match.imageUrl;
@@ -851,7 +906,7 @@ export default function App() {
                                   ? 'border-brand bg-brand/10 shadow-[0_0_15px_rgba(36,168,235,0.12)]' 
                                   : 'border-border-subtle bg-bg-app hover:border-brand/80'
                               }`}>
-                                <div className="relative overflow-hidden rounded-md bg-bg-app aspect-[1640/500]">
+                                <div className="relative overflow-hidden rounded-md bg-bg-app aspect-[10/3]">
                                   <img 
                                     className="w-full h-full object-cover rounded-md transition-[opacity,transform] duration-500 ease-out opacity-100 group-hover:scale-[1.02]" 
                                     alt={tab === 'ALL' ? t('allResources') : tab} 
@@ -879,9 +934,11 @@ export default function App() {
                                           <Star className="w-3 h-3 fill-brand text-brand" /> แนะนำ
                                         </span>
                                       )}
-                                      <span className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand">
-                                        <Flame className="w-3 h-3 fill-brand text-brand" /> ยอดฮิต
-                                      </span>
+                                      {appStats.downloads >= 100 && (
+                                        <span className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand">
+                                          <Flame className="w-3 h-3 fill-brand text-brand" /> ยอดฮิต
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -893,6 +950,100 @@ export default function App() {
                     </div>
                   </div>
                 </section>
+
+                {/* ---------------------------------------------------- */}
+                {/* RECOMMENDED PRODUCTS SECTION */}
+                {/* ---------------------------------------------------- */}
+                <div className="w-full relative mt-8 pt-6 border-t border-border-subtle">
+                  <div className="flex items-center space-x-2 justify-between">
+                    <div>
+                      <h3 className="font-semibold text-xl sm:text-2xl text-text-main line-clamp-1">สินค้าที่คุณอาจสนใจ</h3>
+                      <p className="text-xs sm:text-sm text-text-muted mt-1 inline-flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-brand" /> แนะนำสินค้ายอดฮิต
+                      </p>
+                    </div>
+                    <div>
+                      <button 
+                        onClick={() => { setActiveCategory('ALL'); setCurrentView('category'); }}
+                        className="inline-flex shrink-0 items-center justify-center whitespace-nowrap font-medium transition-colors duration-150 py-1.5 px-3 text-xs sm:text-sm rounded-xl bg-card-bg text-text-main border border-border-subtle hover:bg-bg-app shadow-sm gap-1.5"
+                      >
+                        <ShoppingCart className="w-4 h-4" /> ดูทั้งหมด
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-5 pb-12">
+                    {resourcesData.slice(0, 5).map((item, index) => {
+                       return (
+                        <motion.div 
+                          layout
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          transition={{ duration: 0.2, delay: index * 0.03 }}
+                          key={"rec-" + item.id}
+                          onClick={() => handleOpenDetails(item)}
+                          className="relative rounded-md sm:rounded-lg group overflow-hidden cursor-pointer p-0 bg-transparent flex flex-col shadow-sm"
+                        >
+                          <div className="relative flex-1 z-10 bg-card-bg border border-border-subtle group-hover:border-brand transition-colors duration-200 rounded-md sm:rounded-lg p-1.5 sm:p-2 flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.02)] group-hover:shadow-[0_8px_30px_rgba(106,154,251,0.12)]">
+                            
+                            {appStats.downloads >= 100 && (
+                              <div className="absolute top-1 right-1 z-30 pointer-events-none">
+                                <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-2 py-1 border border-orange-300/40">
+                                  <Flame className="w-3 h-3 text-white fill-white" />
+                                  <span className="text-[10px] sm:text-[11px] font-semibold text-white">ยอดฮิต</span>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="relative z-20 rounded-md overflow-hidden bg-bg-app aspect-square">
+                              <motion.img 
+                                whileHover={{ scale: 1.05 }}
+                                transition={{ duration: 0.4 }}
+                                src={item.imageUrl} 
+                                alt={getLocalized(item.title)} 
+                                className="w-full h-full object-cover sm:object-contain object-center transition-opacity duration-500 ease-out" 
+                                referrerPolicy="no-referrer" 
+                              />
+                            </div>
+                            
+                            <div className="relative z-20 mt-2 flex-1 flex flex-col">
+                              <h3 className="text-sm sm:text-base font-bold text-text-main line-clamp-1 group-hover:text-brand transition-colors">{getLocalized(item.title)}</h3>
+                              <p className="text-[11px] sm:text-xs text-brand line-clamp-1 mt-1 font-medium bg-brand/10 w-fit px-1.5 py-0.5 rounded-md border border-brand/20">
+                                ✦ {getLocalized(item.shortDescription) || 'คุณสมบัติพิเศษ'}
+                              </p>
+                              
+                              <div className="flex items-center mt-3 justify-between space-x-2 pt-2 border-t border-border-subtle mt-auto">
+                                <p className="text-xs sm:text-sm font-medium text-text-main inline-flex items-center">
+                                  <span className="text-lg sm:text-xl font-bold leading-none">฿</span>
+                                  <span className="text-lg sm:text-xl font-bold leading-none text-brand ml-[1px]">0</span>
+                                </p>
+                                <p className="text-[10px] sm:text-[11px] rounded px-1.5 py-0.5 border inline-flex items-center gap-1 border-border-subtle text-text-muted bg-bg-app">
+                                  <Archive className="w-3 h-3 shrink-0" /> คงเหลือ ∞
+                                </p>
+                              </div>
+                              
+                              <div className="flex items-center space-x-2 mt-2">
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleOpenDetails(item); }}
+                                  className="inline-flex shrink-0 items-center justify-center whitespace-nowrap text-sm font-medium outline-none select-none transition-[transform,background-color,color,border-color,box-shadow,opacity] duration-150 py-1.5 px-3 w-full rounded-xl bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] group"
+                                >
+                                  <ShoppingCart className="w-4 h-4 mr-1.5 shrink-0 [transform:perspective(700px)_rotateY(0deg)] [transform-style:preserve-3d] transition-transform duration-700 group-hover:[transform:perspective(700px)_rotateY(360deg)]" /> ซื้อสินค้า
+                                </button>
+                              </div>
+
+                              <div className="mt-2.5 flex items-center justify-center">
+                                <p className="text-[10px] sm:text-[11px] inline-flex items-center gap-1 text-text-muted">
+                                  <Flame className="w-3 h-3 shrink-0 text-orange-500 fill-orange-500" /> ขายแล้ว {(appStats.downloads).toLocaleString()} ชิ้น
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                       )
+                    })}
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
@@ -900,7 +1051,10 @@ export default function App() {
           {/* ---------------------------------------------------- */}
           {/* PAGE 1.5: CATEGORY PAGE WITH BACK BUTTON */}
           {/* ---------------------------------------------------- */}
-          {currentView === 'category' && (
+          {/* ============================================================================ */}
+        {/* 📌 3. หน้าร้านค้า / หมวดหมู่สินค้า (Category View) */}
+        {/* ============================================================================ */}
+        {currentView === 'category' && (
             <motion.div 
               key="category-view"
               initial={{ opacity: 0, x: 20 }}
@@ -932,7 +1086,7 @@ export default function App() {
                 <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-5 pb-12">
                   <AnimatePresence mode="popLayout">
                     {filteredResources.map((item, index) => {
-                       const realDownloads = itemStats[item.id] || 0;
+                       const pseudoSold = (item.title as any)?.th?.length * 15 + index * 7 + 10;
                        return (
                         <motion.div 
                           layout
@@ -944,39 +1098,57 @@ export default function App() {
                           onClick={() => handleOpenDetails(item)}
                           className="relative rounded-md sm:rounded-lg group overflow-hidden cursor-pointer p-0 bg-transparent flex flex-col shadow-sm"
                         >
-                          <div className="relative flex-1 z-10 bg-card-bg border border-border-subtle group-hover:border-brand/50 transition-all duration-300 rounded-[18px] sm:rounded-[22px] p-2 sm:p-2.5 flex flex-col shadow-sm group-hover:shadow-[0_8px_30px_rgba(106,154,251,0.08)]">
+                          <div className="relative flex-1 z-10 bg-card-bg border border-border-subtle group-hover:border-brand transition-colors duration-200 rounded-md sm:rounded-lg p-1.5 sm:p-2 flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.02)] group-hover:shadow-[0_8px_30px_rgba(106,154,251,0.12)]">
                             
-                            {realDownloads > 5 && (
-                              <div className="absolute top-3 right-3 z-30 pointer-events-none">
-                                <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-2 py-1 border border-white/20 shadow-lg shadow-red-500/20">
+                            {appStats.downloads >= 100 && (
+                              <div className="absolute top-1 right-1 z-30 pointer-events-none">
+                                <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-2 py-1 border border-orange-300/40">
                                   <Flame className="w-3 h-3 text-white fill-white" />
-                                  <span className="text-[10px] sm:text-[11px] font-bold text-white uppercase tracking-tight">{t('popular')}</span>
+                                  <span className="text-[10px] sm:text-[11px] font-semibold text-white">ยอดฮิต</span>
                                 </div>
                               </div>
                             )}
 
-                            <div className="relative z-20 rounded-[14px] sm:rounded-[18px] overflow-hidden bg-bg-app aspect-square border border-border-subtle/50">
+                            <div className="relative z-20 rounded-md overflow-hidden bg-bg-app aspect-square">
                               <motion.img 
-                                whileHover={{ scale: 1.08 }}
-                                transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+                                whileHover={{ scale: 1.05 }}
+                                transition={{ duration: 0.4 }}
                                 src={item.imageUrl} 
                                 alt={getLocalized(item.title)} 
-                                className="w-full h-full object-cover sm:object-contain p-2 sm:p-3 object-center transition-opacity duration-500 ease-out" 
+                                className="w-full h-full object-cover sm:object-contain object-center transition-opacity duration-500 ease-out" 
                                 referrerPolicy="no-referrer" 
                               />
                             </div>
                             
-                            <div className="relative z-20 mt-3 flex-1 flex flex-col px-1">
-                              <h3 className="text-sm sm:text-base font-bold text-text-main line-clamp-1 group-hover:text-brand transition-colors tracking-tight">{getLocalized(item.title)}</h3>
-                              <p className="text-[10px] sm:text-[11px] text-brand/80 line-clamp-1 mt-1 font-semibold bg-brand/5 w-fit px-2 py-0.5 rounded-full border border-brand/10">
-                                {getLocalized(item.shortDescription) || t('specialFeature')}
+                            <div className="relative z-20 mt-2 flex-1 flex flex-col">
+                              <h3 className="text-sm sm:text-base font-bold text-text-main line-clamp-1 group-hover:text-brand transition-colors">{getLocalized(item.title)}</h3>
+                              <p className="text-[11px] sm:text-xs text-brand line-clamp-1 mt-1 font-medium bg-brand/10 w-fit px-1.5 py-0.5 rounded-md border border-brand/20">
+                                ✦ {getLocalized(item.shortDescription) || 'คุณสมบัติพิเศษ'}
                               </p>
+                              
+                              <div className="flex items-center mt-3 justify-between space-x-2 pt-2 border-t border-border-subtle mt-auto">
+                                <p className="text-xs sm:text-sm font-medium text-text-main inline-flex items-center">
+                                  <span className="text-lg sm:text-xl font-bold leading-none">฿</span>
+                                  <span className="text-lg sm:text-xl font-bold leading-none text-brand ml-[1px]">0</span>
+                                </p>
+                                <p className="text-[10px] sm:text-[11px] rounded px-1.5 py-0.5 border inline-flex items-center gap-1 border-border-subtle text-text-muted bg-bg-app">
+                                  <Archive className="w-3 h-3 shrink-0" /> คงเหลือ ∞
+                                </p>
+                              </div>
+                              
+                              <div className="flex items-center space-x-2 mt-2">
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleOpenDetails(item); }}
+                                  className="inline-flex shrink-0 items-center justify-center whitespace-nowrap text-sm font-medium outline-none select-none transition-[transform,background-color,color,border-color,box-shadow,opacity] duration-150 py-1.5 px-3 w-full rounded-xl bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] group"
+                                >
+                                  <ShoppingCart className="w-4 h-4 mr-1.5 shrink-0 [transform:perspective(700px)_rotateY(0deg)] [transform-style:preserve-3d] transition-transform duration-700 group-hover:[transform:perspective(700px)_rotateY(360deg)]" /> ซื้อสินค้า
+                                </button>
+                              </div>
 
-                              <div className="mt-auto flex flex-col pt-3">
-                                <div className="flex items-center gap-1 text-[11px] font-bold text-text-muted">
-                                  <Flame className="w-3.5 h-3.5 text-orange-500 fill-orange-500/30" />
-                                  <span>{t('sellCount') || 'ขายแล้ว'} {realDownloads} {t('unitItems') || 'ชิ้น'}</span>
-                                </div>
+                              <div className="mt-2.5 flex items-center justify-center">
+                                <p className="text-[10px] sm:text-[11px] inline-flex items-center gap-1 text-text-muted">
+                                  <Flame className="w-3 h-3 shrink-0 text-orange-500 fill-orange-500" /> ขายแล้ว {(appStats.downloads).toLocaleString()} ชิ้น
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -1007,7 +1179,10 @@ export default function App() {
           {/* ---------------------------------------------------- */}
           {/* PAGE 2: ITEM DETAILS PAGE */}
           {/* ---------------------------------------------------- */}
-          {currentView === 'details' && selectedItem && (
+          {/* ============================================================================ */}
+        {/* 📌 4. หน้ารายละเอียดสินค้า (Product Details View) */}
+        {/* ============================================================================ */}
+        {currentView === 'details' && selectedItem && (
             <motion.div 
               key="details-view"
               initial={{ opacity: 0, y: 10 }}
@@ -1016,13 +1191,28 @@ export default function App() {
               transition={{ duration: 0.2 }}
               className="max-w-[1000px] mx-auto px-5 sm:px-8 py-6 sm:py-8 pb-32 sm:pb-12 w-full"
             >
-              <button 
-                onClick={() => { setCurrentView('category'); setSelectedItem(null); }}
-                className="flex items-center gap-2 text-text-muted hover:text-brand font-medium mb-6 transition-colors group px-2 text-[14px] sm:text-[15px]"
-              >
-                <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" />
-                {t('backToHome')}
-              </button>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-text-muted font-medium mb-6 px-2 text-[13px] sm:text-[14px]">
+                <button 
+                  onClick={() => { setCurrentView('home'); setSelectedItem(null); }}
+                  className="flex items-center gap-1.5 sm:gap-2 hover:text-brand transition-colors whitespace-nowrap"
+                >
+                  <Home className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+                  {t('home') || 'หน้าแรก'}
+                </button>
+                <ChevronRight className="w-3.5 h-3.5 opacity-50" />
+                <button 
+                  onClick={() => { setCurrentView('category'); setSelectedItem(null); setActiveCategory(selectedItem.category); }}
+                  className="flex items-center gap-1.5 sm:gap-2 hover:text-brand transition-colors whitespace-nowrap"
+                >
+                  <Layers className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+                  {selectedItem.category}
+                </button>
+                <ChevronRight className="w-3.5 h-3.5 opacity-50" />
+                <span className="flex items-center gap-1.5 sm:gap-2 text-text-main whitespace-nowrap overflow-hidden text-ellipsis">
+                  <ShoppingBag className="w-4 h-4 sm:w-[18px] sm:h-[18px]" />
+                  {getLocalized(selectedItem.title)}
+                </span>
+              </div>
 
               <div className="flex flex-col lg:flex-row gap-6 lg:gap-12">
                 <div className="w-full lg:w-1/2">
@@ -1043,44 +1233,142 @@ export default function App() {
                     ))}
                   </div>
                   
-                  <h1 className="text-2xl sm:text-3xl font-semibold text-text-main mb-5 tracking-tight leading-[1.3]">
-                    {getLocalized(selectedItem.title)}
-                  </h1>
+                  {/* Unified Product Card */}
+                  <div className="rounded-[16px] overflow-hidden border border-border-subtle bg-card-bg shadow-[0_2px_10px_rgba(0,0,0,0.02)] mb-5">
+                    
+                    {/* Header: Title, Price & Stock */}
+                    <div className="p-4 sm:p-5 flex flex-col gap-3 border-b border-border-subtle">
+                      {/* Product Title */}
+                      <h1 className="text-2xl sm:text-3xl font-semibold text-text-main tracking-tight leading-[1.3]">
+                        {getLocalized(selectedItem.title)}
+                      </h1>
 
-                  {/* Video Clip Button */}
-                  <button className="w-full flex items-center gap-3 px-4 py-3 rounded-[12px] transition-all hover:opacity-80 border border-border-subtle bg-card-bg text-text-main shadow-[0_2px_10px_rgba(0,0,0,0.02)] mb-4">
-                    <Play className="w-4 h-4 opacity-50" fill="currentColor" />
-                    <div className="flex-1 text-left line-clamp-1">
-                      <p className="text-xs font-semibold">{t('videoPreviewTitle')}</p>
-                      <p className="text-[10px] text-text-muted">{t('videoPreviewDesc')}</p>
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        {/* Product Price */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600">
+                            {selectedItem.price ? selectedItem.price : "ฟรี"}
+                          </span>
+                          {!selectedItem.price && (
+                            <span className="bg-emerald-500/10 text-emerald-500 text-xs font-semibold px-2 py-0.5 rounded border border-emerald-500/20">
+                              Free Download
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-text-muted">
+                           จำนวนคงเหลือ : ∞ ไม่จำกัด
+                        </div>
+                      </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 opacity-30" />
-                  </button>
 
-                  {/* Details Block */}
-                  <div className="rounded-[16px] p-4 sm:p-5 mb-5 bg-card-bg border border-border-subtle shadow-[0_2px_10px_rgba(0,0,0,0.02)] relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-1 h-full bg-brand/60"></div>
-                    <p className="text-[10px] font-bold uppercase tracking-wider mb-2.5 text-text-muted">
-                      {t('infoTitle')}
-                    </p>
-                    <p className="text-[13px] sm:text-[14px] leading-relaxed break-words whitespace-pre-line text-text-main font-normal markdown-body">
-                      {getLocalized(selectedItem.fullDescription)}
-                    </p>
+                    <div className="p-4 sm:p-5 flex flex-col gap-5">
+                      
+                      {/* Video Clip Button */}
+                      {selectedItem.videoUrl && (
+                        <button onClick={() => window.open(selectedItem.videoUrl, '_blank')} className="w-full flex items-center gap-3 px-4 py-3 rounded-[12px] transition-all hover:opacity-80 border border-border-subtle bg-card-bg text-text-main shadow-[0_2px_10px_rgba(0,0,0,0.02)] cursor-pointer">
+                          <Play className="w-4 h-4 opacity-50" fill="currentColor" />
+                          <div className="flex-1 text-left line-clamp-1">
+                            <p className="text-xs font-semibold">{t('videoPreviewTitle')}</p>
+                            <p className="text-[10px] text-text-muted">{t('videoPreviewDesc')}</p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 opacity-30" />
+                        </button>
+                      )}
+
+                      {/* Details Block */}
+                      <div>
+                        <h5 className="text-[14px] font-bold flex items-center mb-2.5 text-text-main gap-2">
+                          <FileText className="w-4 h-4 text-brand" /> รายละเอียดสินค้า
+                        </h5>
+                        <div className="rounded-[12px] p-4 bg-bg-app border border-border-subtle shadow-sm relative overflow-hidden">
+                          <div className="absolute top-0 left-0 w-1 h-full bg-brand/60"></div>
+                          <p className="text-[13px] leading-relaxed break-words whitespace-pre-line text-text-main font-normal markdown-body">
+                            {getLocalized(selectedItem.fullDescription)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Product Info Block */}
+                      <div>
+                        <h5 className="text-[14px] font-bold flex items-center mb-2.5 text-text-main gap-2">
+                          <Archive className="w-4 h-4 text-brand" /> ข้อมูลของสินค้า
+                        </h5>
+                        <div className="px-4 py-3 rounded-[12px] border border-border-subtle bg-bg-app flex flex-col gap-2 shadow-sm">
+                            <div className="flex justify-between items-center text-[13px] border-b border-border-subtle pb-2">
+                              <span className="text-text-muted">ชื่อสินค้า :</span>
+                              <span className="text-text-main font-medium line-clamp-1 text-right ml-4">{getLocalized(selectedItem.title)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[13px] border-b border-border-subtle pb-2">
+                              <span className="text-text-muted">ยอดขาย :</span>
+                              <span className="text-text-main font-medium">{(appStats.downloads).toLocaleString()} ชิ้น</span>
+                            </div>
+                            <div className="flex justify-between items-center text-[13px] pt-1">
+                              <span className="text-text-muted">สถานะ :</span>
+                              <span className="text-brand bg-brand/10 px-2 py-0.5 rounded-md font-semibold text-[11px] flex items-center gap-1 border border-brand/20">
+                                <Check className="w-3 h-3" /> พร้อมใช้งาน
+                              </span>
+                            </div>
+                        </div>
+                      </div>
+
+                      {/* Warnings / Notes */}
+                      {selectedItem.warning && (
+                        <div>
+                          <h5 className="text-[14px] font-bold flex items-center mb-2.5 text-red-500 gap-2">
+                            <ShieldAlert className="w-4 h-4 text-red-500" /> ข้อควรทราบ
+                          </h5>
+                          <div className="text-red-500 bg-red-500/5 dark:bg-red-500/10 border border-red-500/20 p-3.5 rounded-[12px] text-[13px] leading-relaxed">
+                            <span className="font-semibold">{t('friendlyNote')}</span> {getLocalized(selectedItem.warning)}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Link & Buy Button */}
+                      {selectedItem.downloadLinks && selectedItem.downloadLinks.length > 0 ? (
+                        <div className="flex flex-col gap-2 mt-2">
+                          <h3 className="text-[13px] font-semibold text-text-main px-1">{t('downloadVersion')}</h3>
+                          {selectedItem.downloadLinks.map((dl, idx) => (
+                            <button 
+                              key={idx}
+                              onClick={() => handleGetLink(undefined, selectedItem, dl.url)}
+                              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[12px] text-[14px] font-medium transition-all group cursor-pointer w-full py-2.5 px-4 bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white shadow-sm hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98]"
+                            >
+                              {selectedItem.requiresLogin && !currentUser ? (
+                                <>
+                                  <Lock className="w-4 h-4 group-hover:-translate-y-1 transition-transform" />
+                                  {t('loginToDownload') || 'Login to Download'}
+                                </>
+                              ) : (
+                                <>
+                                  <ShoppingCart className="w-4 h-4 shrink-0 [transform:perspective(700px)_rotateY(0deg)] [transform-style:preserve-3d] transition-transform duration-700 group-hover:[transform:perspective(700px)_rotateY(360deg)]" />
+                                  {dl.label}
+                                </>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-center">
+                          <button 
+                            onClick={() => handleGetLink(undefined, selectedItem)}
+                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[12px] text-[14px] font-medium transition-all group cursor-pointer sm:w-auto w-full py-2.5 px-6 mx-auto bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white shadow-sm hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98]"
+                          >
+                            {selectedItem.requiresLogin && !currentUser ? (
+                              <>
+                                <Lock className="w-4 h-4 group-hover:-translate-y-1 transition-transform" />
+                                {t('loginToDownload') || 'Login to Download'}
+                              </>
+                            ) : (
+                              <>
+                                <ShoppingCart className="w-4 h-4 shrink-0 [transform:perspective(700px)_rotateY(0deg)] [transform-style:preserve-3d] transition-transform duration-700 group-hover:[transform:perspective(700px)_rotateY(360deg)]" />
+                                สั่งซื้อสินค้า
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-
-                  <button 
-                    onClick={() => handleGetLink(undefined, selectedItem, selectedItem.downloadLinks && selectedItem.downloadLinks.length > 0 ? selectedItem.downloadLinks[0].url : undefined)}
-                    className="w-full py-4.5 bg-brand text-white rounded-[22px] font-bold text-[16px] text-center hover:opacity-90 hover:shadow-xl hover:shadow-brand/30 active:scale-[0.98] transition-all flex items-center justify-center shadow-[0_8px_20px_rgba(106,154,251,0.3)]"
-                  >
-                    {selectedItem.requiresLogin && !currentUser ? (
-                      <>
-                        <Lock className="w-5 h-5 shrink-0" />
-                        <span className="ml-2">{t('loginToDownload') || 'Login to Download'}</span>
-                      </>
-                    ) : (
-                      <span>{t('load') || 'โหลด'}</span>
-                    )}
-                  </button>
                 </div>
               </div>
             </motion.div>
@@ -1089,7 +1377,10 @@ export default function App() {
           {/* ---------------------------------------------------- */}
           {/* PAGE 3: HELP & FAQ PAGE */}
           {/* ---------------------------------------------------- */}
-          {currentView === 'help' && (
+          {/* ============================================================================ */}
+        {/* 📌 5. หน้าช่วยเหลือ / วิธีรับสินค้า (Help View) */}
+        {/* ============================================================================ */}
+        {currentView === 'help' && (
              <motion.div 
                key="help-view"
                initial={{ opacity: 0, y: 10 }}
@@ -1181,7 +1472,7 @@ export default function App() {
         <footer className="w-full border-t border-border-subtle bg-card-bg/50 backdrop-blur-sm mt-8">
           <div className="max-w-[1600px] mx-auto px-4 sm:px-8 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="text-center md:text-left flex flex-col items-center md:items-start">
-              <img src={siteConfig.logoUrl} alt="Logo" className="h-6 sm:h-7 object-contain drop-shadow-sm mb-1 opacity-80 mix-blend-multiply" />
+              <img src="https://img2.pic.in.th/IMG_0083.png" alt="Logo" className="h-6 sm:h-7 object-contain drop-shadow-sm mb-1 opacity-80 mix-blend-multiply" />
               <p className="text-[13px] text-text-muted mt-1">{t('footerDesc')}</p>
             </div>
             <div className="flex items-center gap-6 text-[13px] font-medium text-text-muted">
@@ -1189,7 +1480,7 @@ export default function App() {
               <button onClick={() => setShowSocialsModal(true)} className="hover:text-brand transition-colors">{t('socialsFollow')}</button>
             </div>
             <div className="text-[12px] text-text-muted/70">
-              &copy; {new Date().getFullYear()} {siteConfig.name}. All rights reserved.
+              &copy; {new Date().getFullYear()} Zorix Shop. All rights reserved.
             </div>
           </div>
         </footer>
@@ -1200,7 +1491,10 @@ export default function App() {
       {/* SOCIALS MODAL */}
       {/* ========================================================================= */}
       <AnimatePresence>
-        {showSocialsModal && (
+        {/* ============================================================================ */}
+      {/* 📌 หน้าต่าง Pop-up แสดงช่องทางติดต่อ Social Media */}
+      {/* ============================================================================ */}
+      {showSocialsModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
              <motion.div 
                initial={{ opacity: 0 }}
@@ -1233,15 +1527,15 @@ export default function App() {
                <div className="space-y-3">
                  <a href="#" onClick={(e) => { e.preventDefault(); alert(t('fbLink')); }} className="flex items-center gap-4 bg-bg-app hover:bg-brand hover:text-white group p-4 rounded-[16px] transition-all cursor-pointer border border-transparent hover:border-brand">
                    <Facebook className="w-5 h-5 text-[#1877F2] group-hover:text-white transition-colors" />
-                   <span className="font-medium text-text-main group-hover:text-white transition-colors">Assets Hub Fanpage</span>
+                   <span className="font-medium text-text-main group-hover:text-white transition-colors">Zorix Shop Fanpage</span>
                  </a>
                  <a href="#" onClick={(e) => { e.preventDefault(); alert(t('igLink')); }} className="flex items-center gap-4 bg-bg-app hover:bg-brand hover:text-white group p-4 rounded-[16px] transition-all cursor-pointer border border-transparent hover:border-brand">
                    <Instagram className="w-5 h-5 text-[#E4405F] group-hover:text-white transition-colors" />
-                   <span className="font-medium text-text-main group-hover:text-white transition-colors">@assetshub.th</span>
+                   <span className="font-medium text-text-main group-hover:text-white transition-colors">@zorix.shop</span>
                  </a>
                  <a href="#" onClick={(e) => { e.preventDefault(); alert(t('dcLink')); }} className="flex items-center gap-4 bg-bg-app hover:bg-brand hover:text-white group p-4 rounded-[16px] transition-all cursor-pointer border border-transparent hover:border-brand">
                    <MessageCircle className="w-5 h-5 text-[#00B2FF] group-hover:text-white transition-colors" />
-                   <span className="font-medium text-text-main group-hover:text-white transition-colors">Assets Community</span>
+                   <span className="font-medium text-text-main group-hover:text-white transition-colors">Zorix Community</span>
                  </a>
                </div>
              </motion.div>
@@ -1253,7 +1547,10 @@ export default function App() {
       {/* FEEDBACK MODAL */}
       {/* ========================================================================= */}
       <AnimatePresence>
-        {showFeedbackModal && (
+        {/* ============================================================================ */}
+      {/* 📌 หน้าต่าง Pop-up Feedback แจ้งปัญหา / แนะนำ */}
+      {/* ============================================================================ */}
+      {showFeedbackModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
              <motion.div 
                initial={{ opacity: 0 }}
@@ -1334,7 +1631,10 @@ export default function App() {
       {/* reCAPTCHA VERIFICATION MODAL */}
       {/* ========================================================================= */}
       <AnimatePresence>
-        {showVerifyModal && selectedItem && (
+        {/* ============================================================================ */}
+      {/* 📌 หน้าต่าง Pop-up ยืนยันการรับสินค้า (Verification Modal) */}
+      {/* ============================================================================ */}
+      {showVerifyModal && selectedItem && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }}
@@ -1343,10 +1643,9 @@ export default function App() {
               className="absolute inset-0 bg-black/60 backdrop-blur-md"
             />
             <motion.div 
-              initial={{ opacity: 0, scale: 0.8, y: 100, rotateX: 15 }}
-              animate={{ opacity: 1, scale: 1, y: 0, rotateX: 0 }}
-              exit={{ opacity: 0, scale: 0.8, y: 100, rotateX: -15 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="bg-card-bg w-full max-w-[420px] p-6 sm:p-8 rounded-[24px] sm:rounded-[32px] shadow-[0_20px_60px_rgba(0,0,0,0.15)] relative border border-border-subtle z-10 max-h-[90dvh] overflow-y-auto hide-scrollbar"
             >
               <button 
@@ -1356,12 +1655,7 @@ export default function App() {
                 <X className="w-5 h-5" />
               </button>
               
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                className="text-center mb-8 mt-2"
-              >
+              <div className="text-center mb-8 mt-2">
                 <div className="w-16 h-16 bg-brand/10 border border-brand/20 rounded-[20px] flex items-center justify-center mx-auto mb-4">
                    <ShieldAlert className="w-8 h-8 text-brand" />
                 </div>
@@ -1376,21 +1670,13 @@ export default function App() {
                     <p className="text-[12px] text-red-500/80 leading-relaxed" dangerouslySetInnerHTML={{ __html: t('verifyWarningDesc') }}></p>
                   </div>
                 </div>
-              </motion.div>
+              </div>
 
               {/* Steps Container */}
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.2 }}
-                className="flex flex-col gap-3 mb-6"
-              >
+              <div className="flex flex-col gap-3 mb-6">
                 
                 {/* Step 1 */}
-                <motion.div 
-                  whileHover={{ x: 5 }}
-                  className="bg-bg-app border border-border-subtle rounded-[16px] p-4 shadow-sm flex items-center justify-between"
-                >
+                <div className="bg-bg-app border border-border-subtle rounded-[16px] p-4 shadow-sm flex items-center justify-between">
                   <div className="flex items-center gap-3">
                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step1Status === 'completed' ? 'bg-emerald-500/20 text-emerald-500' : step1Status === 'error' ? 'bg-red-500/20 text-red-500' : 'bg-rose-500/20 text-rose-500'}`}>
                         {step1Status === 'completed' ? <Check className="w-4 h-4" /> : <Youtube className="w-4 h-4" />}
@@ -1415,16 +1701,13 @@ export default function App() {
                     {step1Status === 'checking' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     {step1Status === 'completed' ? t('verifyDone') : step1Status === 'checking' ? t('verifyCheck') : step1Status === 'error' ? t('verifyRetry') : t('verifyDo')}
                   </button>
-                </motion.div>
+                </div>
 
                 {/* Step 2 */}
-                <motion.div 
-                  whileHover={{ x: 5 }}
-                  className="bg-bg-app border border-border-subtle rounded-[16px] p-4 shadow-sm flex items-center justify-between"
-                >
+                <div className="bg-bg-app border border-border-subtle rounded-[16px] p-4 shadow-sm flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step2Status === 'completed' ? 'bg-emerald-500/20 text-emerald-500' : step2Status === 'error' ? 'bg-red-500/20 text-red-500' : 'bg-blue-500/20 text-blue-500'}`}>
-                        {step2Status === 'completed' ? <Check className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+                     <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step2Status === 'completed' ? 'bg-emerald-500/20 text-emerald-500' : step2Status === 'error' ? 'bg-red-500/20 text-red-500' : 'bg-[#5865F2]/20 text-[#5865F2]'}`}>
+                        {step2Status === 'completed' ? <Check className="w-4 h-4" /> : <MessageSquare className="w-4 h-4" />}
                      </div>
                      <div className="flex flex-col">
                        <span className={`text-[15px] font-medium tracking-tight ${step2Status === 'completed' ? 'text-text-muted line-through' : 'text-text-main'}`}>
@@ -1435,18 +1718,18 @@ export default function App() {
                      </div>
                   </div>
                   <button 
-                    onClick={() => { window.open('https://t.me', '_blank'); step2OpenedAt.current = Date.now(); setStep2Status('checking'); }}
+                    onClick={() => { window.open('https://discord.gg/hSuBbnwWZY', '_blank'); step2OpenedAt.current = Date.now(); setStep2Status('checking'); }}
                     disabled={step2Status === 'completed'}
                     className={`px-4 py-2 rounded-[12px] text-[13px] font-medium transition-all flex-shrink-0 flex items-center gap-2 ${
                       step2Status === 'completed' ? 'bg-emerald-500 text-white opacity-70 cursor-not-allowed' : 
                       step2Status === 'checking' ? 'bg-amber-500 text-white cursor-pointer hover:bg-amber-600 animate-pulse' :
-                      'bg-[#0088cc] text-white hover:bg-[#0077b3] shadow-sm cursor-pointer'
+                      'bg-[#5865F2] text-white hover:bg-[#4752C4] shadow-sm cursor-pointer'
                     }`}
                   >
                     {step2Status === 'checking' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                     {step2Status === 'completed' ? t('verifyDone') : step2Status === 'checking' ? t('verifyCheck') : step2Status === 'error' ? t('verifyRetry') : t('verifyDo')}
                   </button>
-                </motion.div>
+                </div>
 
                 {/* Step 3 (Verified Check Block) */}
                 <div className={`flex justify-center transition-opacity duration-300 ${(step1Status !== 'completed' || step2Status !== 'completed') ? 'opacity-60 grayscale pointer-events-none' : 'opacity-100'}`}>
@@ -1461,7 +1744,7 @@ export default function App() {
                   ) : (
                      <div className="mx-auto rounded-[8px] overflow-hidden shadow-sm inline-block relative">
                         <ReCAPTCHA
-                          sitekey="6Lflgr4sAAAAAF8MveDgfE1Va2ImRfynRsLFP1nl"
+                          sitekey="6LcHYMgsAAAAAIxpQxY5vKS5gdu3Uw-E92pgPEXh"
                           onChange={handleVerifyRecaptcha}
                           theme={theme}
                         />
@@ -1471,7 +1754,8 @@ export default function App() {
                      </div>
                   )}
                 </div>
-              </motion.div>
+
+              </div>
 
               <AnimatePresence>
                 {networkError && (
@@ -1541,13 +1825,18 @@ export default function App() {
               <button 
                 disabled={!(!isCounting && isChecked && countdown === 0)}
                 onClick={handleFinalRedirect}
-                className={`w-full py-4.5 rounded-[20px] text-[15px] font-medium text-center transition-all flex items-center justify-center gap-2 group ${
+                className={`w-full py-4.5 rounded-[20px] text-[15px] font-bold text-center transition-all flex items-center justify-center gap-2 group ${
                   !isCounting && isChecked && countdown === 0 
-                    ? 'bg-brand text-white hover:opacity-90 hover:shadow-xl hover:shadow-brand/30 hover:-translate-y-1 active:scale-95 cursor-pointer' 
+                    ? 'bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] cursor-pointer' 
                     : 'bg-bg-app text-text-muted border border-border-subtle cursor-not-allowed'
                 }`}
               >
-                {!isChecked ? t('waitingVerify') : (countdown > 0 ? t('gettingLink') : t('goDownload'))}
+                {!isChecked ? t('waitingVerify') : (countdown > 0 ? t('gettingLink') : (
+                  <>
+                    <ShoppingCart className="w-5 h-5 shrink-0 [transform:perspective(700px)_rotateY(0deg)] [transform-style:preserve-3d] transition-transform duration-700 group-hover:[transform:perspective(700px)_rotateY(360deg)]" />
+                    {t('goDownload')}
+                  </>
+                ))}
               </button>
 
             </motion.div>
@@ -1555,7 +1844,10 @@ export default function App() {
         )}
       </AnimatePresence>
       <AnimatePresence>
-        {authModalType && (
+        {/* ============================================================================ */}
+      {/* 📌 หน้าต่าง Pop-up ล็อกอิน / สมัครสมาชิก (Auth Modal) */}
+      {/* ============================================================================ */}
+      {authModalType && (
           <AuthModal
             type={authModalType}
             onClose={() => setAuthModalType(null)}
@@ -1572,7 +1864,10 @@ export default function App() {
           />
         )}
         
-        {showProfileModal && currentUser && (
+        {/* ============================================================================ */}
+      {/* 📌 หน้าต่าง Pop-up โปรไฟล์ส่วนตัว (Profile Modal) */}
+      {/* ============================================================================ */}
+      {showProfileModal && currentUser && (
           <ProfileModal
             currentUser={currentUser}
             onClose={() => setShowProfileModal(false)}
@@ -1586,5 +1881,3 @@ export default function App() {
     </div>
   );
 }
-
-// End of App component

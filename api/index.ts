@@ -1,13 +1,45 @@
 import express from "express";
 import crypto from "crypto";
-import cors from "cors"; // 1. เพิ่ม CORS
+import cors from "cors";
+import helmet from "helmet";
+import hpp from "hpp";
+import rateLimit from "express-rate-limit";
 import { connectDB } from "./_lib/db.js";
 import authRoutes from "./_lib/auth.js";
 import statsRoutes from "./_lib/stats.js";
 
 const app = express();
 
-// 2. ตั้งค่า CORS ให้ Dashboard ลับยิงเข้ามาได้
+// --- 🛡️ 1. Trust Proxy (สำคัญมากถ้าอยู่หลัง Cloudflare / Vercel / Nginx) ---
+app.set("trust proxy", 1); 
+
+// --- 🛡️ 2. Security Middleware (Helmet & HPP) ---
+app.use(helmet({
+  contentSecurityPolicy: false, // ปิดไว้ก่อนเพื่อไม่ให้กระทบ React/Vite (หากต้องการ strict ขึ้นค่อยเปิด)
+  crossOriginEmbedderPolicy: false,
+}));
+app.use(hpp()); // ป้องกัน HTTP Parameter Pollution
+
+// --- 🛡️ 3. Global Rate Limiter ---
+// จำกัด 300 requests ต่อ 15 นาทีต่อ IP เพื่อป้องกัน DDoS เบื้องต้น
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 300, 
+  message: { success: false, error: "Too many requests from this IP, please try again after 15 minutes." },
+  standardHeaders: true, 
+  legacyHeaders: false,
+});
+app.use('/api', globalLimiter); // นำไปใช้กับ /api ทั้งหมด
+
+// --- 🛡️ 4. Abuse Protection (Stricter Limit) ---
+// จำกัด API ที่ sensitive (auth, captcha)
+const abuseLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 ชั่วโมง
+  max: 50, // 50 requests
+  message: { success: false, error: "Too many sensitive requests. Please try again later." }
+});
+
+// ตั้งค่า CORS ให้ Dashboard ลับยิงเข้ามาได้
 app.use(cors({
   origin: '*', 
   allowedHeaders: ['Content-Type', 'x-admin-token']
@@ -101,7 +133,7 @@ app.patch('/api/admin/resources/:id', isAdmin, async (req: any, res: any) => {
 // --- [ จบส่วน ADMIN API ] ---
 
 // Mount original routes
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", abuseLimiter, authRoutes);
 app.use("/api/stats", statsRoutes);
 
 // Stateless URL signer using HMAC (Original)
@@ -141,7 +173,7 @@ function botDetection(req: express.Request) {
 }
 
 // API Routes (Original)
-app.post("/api/verify-captcha", async (req, res) => {
+app.post("/api/verify-captcha", abuseLimiter, async (req, res) => {
   const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
   if (!botDetection(req)) {
       res.status(403).json({ success: false, error: 'Request blocked by bot detection' });

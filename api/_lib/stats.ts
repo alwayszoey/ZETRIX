@@ -27,18 +27,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-router.get('/items', async (req, res) => {
-  try {
-    const dbInstance: any = await connectDB();
-    const db = dbInstance?.db || dbInstance;
-    const items = await db.collection("itemStats").find({}).toArray();
-    res.json({ success: true, items });
-  } catch (error) {
-    console.error("Error fetching item stats:", error);
-    res.status(500).json({ success: false, error: "Server Error" });
-  }
-});
-
 // Increment views
 router.post('/view', async (req, res) => {
   try {
@@ -55,7 +43,7 @@ router.post('/view', async (req, res) => {
   }
 });
 
-// Increment global download
+// Increment downloads
 router.post('/download', async (req, res) => {
   try {
     // @ts-ignore
@@ -71,26 +59,18 @@ router.post('/download', async (req, res) => {
   }
 });
 
-// Increment item download
-router.post('/download/:itemId', async (req, res) => {
+// Reset downloads to 0
+router.post('/reset', async (req, res) => {
   try {
-    const { itemId } = req.params;
-    const dbInstance: any = await connectDB();
-    const db = dbInstance?.db || dbInstance;
-    
-    const result = await db.collection("itemStats").findOneAndUpdate(
-      { itemId: String(itemId) },
-      { $inc: { downloads: 1 } },
-      { upsert: true, returnDocument: 'after' }
-    );
-    
-    // Also increment global downloads
     // @ts-ignore
-    await Stat.findOneAndUpdate({ name: 'global' }, { $inc: { downloads: 1 } }, { upsert: true });
-
-    res.json({ success: true, itemId: String(itemId), downloads: result ? result.downloads : 1 });
+    const stats = await Stat.findOneAndUpdate(
+      { name: 'global' },
+      { $set: { downloads: 0 } },
+      { new: true, upsert: true }
+    );
+    res.json({ success: true, downloads: stats?.downloads || 0 });
   } catch (error) {
-    console.error("Error incrementing item download:", error);
+    console.error("Error resetting download:", error);
     res.status(500).json({ success: false, error: "Server Error" });
   }
 });

@@ -203,7 +203,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ type, onClose, onSuccess, 
           {view === 'register' && (
             <div className="flex justify-center mt-2 overflow-hidden rounded-[8px] border border-border-subtle">
               <ReCAPTCHA
-                sitekey="6Lflgr4sAAAAAF8MveDgfE1Va2ImRfynRsLFP1nl"
+                sitekey="6LcHYMgsAAAAAIxpQxY5vKS5gdu3Uw-E92pgPEXh"
                 onChange={(token) => setRecaptchaToken(token)}
               />
             </div>

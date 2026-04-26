@@ -5,7 +5,6 @@ import { ModalShell } from './ModalShell';
 interface TopupPromptPayModalProps {
   onClose: () => void;
   onSuccess: (amount: number) => void;
-  lang?: 'th' | 'vi';
 }
 
 type Step = 'amount' | 'qr' | 'verify' | 'done';

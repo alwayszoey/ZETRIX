@@ -5,7 +5,6 @@ import { ModalShell } from './ModalShell';
 interface TopupSlipModalProps {
   onClose: () => void;
   onSuccess: (amount: number) => void;
-  lang?: 'th' | 'vi';
 }
 
 type OcrStatus = 'idle' | 'scanning' | 'done' | 'error';
