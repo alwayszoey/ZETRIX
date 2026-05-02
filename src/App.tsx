@@ -3,11 +3,17 @@ import {
   Search, ShieldAlert, Download, X, RefreshCcw, LayoutGrid, Layers, 
   Archive, Settings, FileText, Check, Zap, Menu, ArrowLeft, 
   Home, HelpCircle, Share2, Facebook, Instagram, MessageCircle,
-  Play, ChevronRight, Loader2, Youtube, Send, MessageSquare, Sun, Moon, Lock, UserPlus, LogOut, Users, Eye, Star, Flame, ShoppingCart, Sparkles, ShoppingBag, History, HardDriveDownload, ExternalLink, Link2
+  Play, ChevronRight, Loader2, Youtube, Send, MessageSquare, Sun, Moon, Lock, UserPlus, LogOut, Users, Eye, Star, Flame, ShoppingCart, Sparkles, ShoppingBag, History, HardDriveDownload, ExternalLink, Link2,
+  CircleX
 } from 'lucide-react';
-import { resourcesData, ResourceItem } from './data';
+import { resourcesData, ResourceItem, categoriesData } from './data';
 import { motion, AnimatePresence } from 'motion/react';
-import ReCAPTCHA from "react-google-recaptcha";
+import { Routes, Route, Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import HomePage from './pages/Home';
+import AboutPage from './pages/About';
+import ContactPage from './pages/Contact';
+import ProductDetailPage from './pages/ProductDetail';
+import { Turnstile } from '@marsidev/react-turnstile';
 import { translations } from './translations';
 import { siteConfig } from './config';
 import { AuthModal } from './AuthModal';
@@ -119,10 +125,12 @@ function PromoPopup() {
 // 📌 COMPONENT: App (ส่วนหลักของเว็บไซต์ รวบรวมหน้าต่างๆ ไว้ที่นี่)
 // ============================================================================
 export default function App() {
+  const navigate = useNavigate();
   const [lang, setLang] = useState<AppLang | null>(null);
   const [isAppLoading, setIsAppLoading] = useState(true);
 
   const [welcomeState, setWelcomeState] = useState<'welcome' | 'checking' | 'done'>('done');
+  const [isTurnstileVerified, setIsTurnstileVerified] = useState(false);
   
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
@@ -145,6 +153,40 @@ export default function App() {
     return { users: 0, views: 0, downloads: 0 };
   });
 
+// ── OAuth: รับ token จาก popup (postMessage) ──────────────────────────────
+useEffect(() => {
+  const handleOAuthMessage = (event: MessageEvent) => {
+    if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+      const { token, user } = event.data;
+      if (!token || !user) return;
+      localStorage.setItem('authToken', token);
+      setCurrentUser({ id: user.id, username: user.username, email: user.email, avatarUrl: user.avatarUrl });
+    }
+  };
+  window.addEventListener('message', handleOAuthMessage);
+  return () => window.removeEventListener('message', handleOAuthMessage);
+}, []);
+
+// ── OAuth: รับ token จาก URL fallback (?token=...) ───────────────────────
+useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const urlToken = params.get('token');
+  if (!urlToken) return;
+  window.history.replaceState({}, document.title, window.location.pathname);
+  localStorage.setItem('authToken', urlToken);
+  fetch('/api/auth/me', {
+    headers: { 'Authorization': `Bearer ${urlToken}` }
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.user) {
+        setCurrentUser({ id: data.user._id, username: data.user.username, email: data.user.email, avatarUrl: data.user.avatarUrl });
+      }
+    })
+    .catch(() => localStorage.removeItem('authToken'));
+}, []);
+
+  
   useEffect(() => {
     // Theme Initializer (Default to Light always on first visit)
     const savedTheme = localStorage.getItem('appTheme') as 'light' | 'dark';
@@ -157,8 +199,8 @@ export default function App() {
       localStorage.setItem('appTheme', 'light');
     }
 
-    const hasVisited = localStorage.getItem('hasVisitedStore');
-    if (hasVisited) {
+    const hasVerifiedEntry = sessionStorage.getItem('hasVerifiedEntry');
+    if (hasVerifiedEntry) {
       setWelcomeState('done');
     } else {
       setWelcomeState('welcome');
@@ -264,9 +306,8 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showSocialsModal, setShowSocialsModal] = useState(false);
   
-  // Extract unique categories from resourcesData, prepending 'ALL'
-  const allCategoriesSet = new Set(resourcesData.map(item => item.category));
-  const categories = ['ALL', ...Array.from(allCategoriesSet)];
+  // Use categories strictly from categoriesData
+  const categories = ['ALL', ...categoriesData.map(c => c.name)];
 
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showOrderConfirmModal, setShowOrderConfirmModal] = useState(false);
@@ -297,7 +338,12 @@ export default function App() {
   // Auto-redirect to home grid if user types in search
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
-    if (currentView !== 'home') {
+    if (e.target.value.trim() !== '') {
+      if (currentView !== 'category') {
+        setCurrentView('category');
+      }
+      setActiveCategory('ALL');
+    } else if (currentView === 'category' && activeCategory === 'ALL' && e.target.value === '') {
       setCurrentView('home');
     }
     if (selectedItem) setSelectedItem(null);
@@ -307,16 +353,22 @@ export default function App() {
     const isAll = activeCategory === 'ALL';
     const matchesCategory = isAll || item.category === activeCategory;
     
+    const query = searchQuery.toLowerCase().trim();
+    if (!query) return matchesCategory;
+
     // Getting localized strings for accurate searching
-    const titleText = getLocalized(item.title);
-    const ms = titleText.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          item.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesCategory && ms;
+    const titleText = getLocalized(item.title).toLowerCase();
+    const descText = getLocalized(item.shortDescription).toLowerCase();
+    
+    const hasTagMatch = (item.tags || []).some(tag => tag.toLowerCase().includes(query));
+    
+    const isMatch = titleText.includes(query) || descText.includes(query) || hasTagMatch;
+    
+    return matchesCategory && isMatch;
   });
 
   const handleOpenDetails = (item: ResourceItem) => {
-    setSelectedItem(item);
-    setCurrentView('details');
+    navigate(`/shop/product/${item.id}`);
   };
 
   const handleGetLink = (e?: React.MouseEvent, item?: ResourceItem, specificLink?: string) => {
@@ -531,7 +583,7 @@ export default function App() {
 
   const downloadSelectedHistoryAsTxt = () => {
     if (selectedHistories.size === 0) return;
-    const itemsToDownload = Array.from(selectedHistories).sort((a,b)=>a-b).map(i => {
+    const itemsToDownload = Array.from<number>(selectedHistories).sort((a: number, b: number) => a - b).map(i => {
         const h = filteredHistories.slice().reverse()[i];
         return h;
     });
@@ -643,7 +695,7 @@ ${h.details || '-'}
   }, []);
 
   const handleEnterStore = () => {
-    localStorage.setItem('hasVisitedStore', 'true');
+    sessionStorage.setItem('hasVerifiedEntry', 'true');
     setWelcomeState('checking');
     setTimeout(() => {
       setWelcomeState('done');
@@ -704,9 +756,18 @@ ${h.details || '-'}
                   ศูนย์รวมซอร์สโค้ดและสคริปต์คุณภาพสูง พร้อมใช้สำหรับโปรเจกต์ของคุณ
                 </h2>
                 
+                <div className="flex justify-center mb-6">
+                  <Turnstile
+                    siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || "0x4AAAAAADFFAhm_1PRQij4M"}
+                    onSuccess={(token) => setIsTurnstileVerified(true)}
+                    options={{ theme: theme as any }}
+                  />
+                </div>
+
                 <button 
                   onClick={handleEnterStore}
-                  className="w-full flex items-center justify-center gap-3 py-4 rounded-[16px] bg-brand hover:brightness-110 border-2 border-transparent text-white transition-all text-[16px] font-bold cursor-pointer shadow-lg shadow-brand/20 active:scale-[0.98]"
+                  disabled={!isTurnstileVerified}
+                  className="w-full flex items-center justify-center gap-3 py-4 rounded-[16px] bg-brand hover:brightness-110 border-2 border-transparent text-white transition-all text-[16px] font-bold cursor-pointer shadow-lg shadow-brand/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   เข้าสู่ Zorix Shop <ChevronRight className="w-5 h-5 opacity-80" />
                 </button>
@@ -726,9 +787,6 @@ ${h.details || '-'}
     );
   }
 
-  // Define translated categories array
-  const activeCategories = [t('allResources'), 'Aimbet', 'Bypass', 'ProxyPin', 'Scripts', 'Macros', 'MOD'];
-
   if (isAppLoading && lang) {
     return (
       <div className="fixed inset-0 bg-slate-50 z-[9999] flex flex-col justify-center items-center">
@@ -742,9 +800,9 @@ ${h.details || '-'}
   // 📌 RENDER - โครงสร้าง HTML ทั้งหมดของเว็บ
   // ============================================================================
   return (
-    <div className="flex flex-col h-[100dvh] overflow-hidden bg-bg-app text-text-main font-sans selection:bg-brand selection:text-white">
-      
-      <PromoPopup />
+      <div className="flex flex-col h-[100dvh] overflow-hidden bg-bg-app text-text-main font-sans selection:bg-brand selection:text-white">
+        
+        <PromoPopup />
 
       {/* ========================================================================= */}
       {/* TOP NAVBAR */}
@@ -752,13 +810,22 @@ ${h.details || '-'}
       <nav className="sticky top-0 z-40 bg-card-bg/95 backdrop-blur-xl border-b border-border-subtle px-4 sm:px-8 py-3.5 flex items-center justify-between gap-3 shadow-[0_4px_30px_rgba(0,0,0,0.02)]">
         
         {/* Logo Section */}
-        <div 
+        <Link 
+          to="/"
           onClick={() => { setCurrentView('home'); setSelectedItem(null); }} 
           className="flex items-center gap-3 shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
         >
           <img src={siteConfig.logoUrl} alt="Logo" className="h-9 sm:h-10 object-contain drop-shadow-sm" />
-        </div>
+        </Link>
         
+        {/* Desktop Menu */}
+        <div className="hidden lg:flex items-center gap-6 mx-4">
+          <NavLink to="/" className={({ isActive }) => `text-sm font-bold transition-all hover:text-brand ${isActive ? 'text-brand' : 'text-text-muted'}`}>{t('home')}</NavLink>
+          <NavLink to="/store" className={({ isActive }) => `text-sm font-bold transition-all hover:text-brand ${isActive ? 'text-brand' : 'text-text-muted'}`}>{t('store')}</NavLink>
+          <NavLink to="/about" className={({ isActive }) => `text-sm font-bold transition-all hover:text-brand ${isActive ? 'text-brand' : 'text-text-muted'}`}>{t('aboutUs')}</NavLink>
+          <NavLink to="/contact" className={({ isActive }) => `text-sm font-bold transition-all hover:text-brand ${isActive ? 'text-brand' : 'text-text-muted'}`}>{t('contactUs')}</NavLink>
+        </div>
+
         {/* Center Search Bar */}
         <div className="flex-1 max-w-2xl relative mx-auto">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -824,18 +891,34 @@ ${h.details || '-'}
               exit={{ opacity: 0, y: -10 }}
               className="absolute top-[68px] right-0 sm:right-6 w-full sm:w-[280px] bg-card-bg border-b sm:border border-border-subtle sm:rounded-[24px] shadow-2xl z-50 p-4 flex flex-col gap-1.5"
             >
-              <button 
+              <Link 
+                to="/"
                 onClick={() => { setIsMobileMenuOpen(false); setCurrentView('home'); setSelectedItem(null); }} 
                 className="flex items-center gap-3 p-3.5 rounded-[16px] hover:bg-bg-app text-left font-medium text-text-main hover:text-brand transition-colors w-full group"
               >
                 <Home className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> {t('home')}
-              </button>
-              <button 
-                onClick={() => { setIsMobileMenuOpen(false); setCurrentView('help'); setSelectedItem(null); }} 
+              </Link>
+              <Link 
+                to="/store"
+                onClick={() => { setIsMobileMenuOpen(false); setCurrentView('home'); setSelectedItem(null); }} 
                 className="flex items-center gap-3 p-3.5 rounded-[16px] hover:bg-bg-app text-left font-medium text-text-main hover:text-brand transition-colors w-full group"
               >
-                <HelpCircle className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> {t('help')}
-              </button>
+                <ShoppingBag className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> {t('store') || 'ร้านค้า'}
+              </Link>
+              <Link 
+                to="/about"
+                onClick={() => setIsMobileMenuOpen(false)} 
+                className="flex items-center gap-3 p-3.5 rounded-[16px] hover:bg-bg-app text-left font-medium text-text-main hover:text-brand transition-colors w-full group"
+              >
+                <HelpCircle className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> {t('aboutUs')}
+              </Link>
+              <Link 
+                to="/contact"
+                onClick={() => setIsMobileMenuOpen(false)} 
+                className="flex items-center gap-3 p-3.5 rounded-[16px] hover:bg-bg-app text-left font-medium text-text-main hover:text-brand transition-colors w-full group"
+              >
+                <MessageSquare className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> {t('contactUs')}
+              </Link>
               <button 
                 onClick={() => { setIsMobileMenuOpen(false); setShowSocialsModal(true); }} 
                 className="flex items-center gap-3 p-3.5 rounded-[16px] hover:bg-bg-app text-left font-medium text-text-main hover:text-brand transition-colors w-full group"
@@ -913,15 +996,21 @@ ${h.details || '-'}
       {/* MAIN CONTENT AREA */}
       {/* ========================================================================= */}
       <main className="flex-1 overflow-y-auto w-full relative">
-        <AnimatePresence mode="wait">
-          
-          {/* ---------------------------------------------------- */}
-          {/* PAGE 1: RESOURCES GRID */}
-          {/* ---------------------------------------------------- */}
-          {/* ============================================================================ */}
-        {/* 📌 2. หน้าแรก (Home View) */}
-        {/* ============================================================================ */}
-        {currentView === 'home' && (
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/shop/product/:id" element={<ProductDetailPage />} />
+          <Route path="/store" element={
+            <AnimatePresence mode="wait">
+              
+              {/* ---------------------------------------------------- */}
+              {/* PAGE 1: RESOURCES GRID */}
+              {/* ---------------------------------------------------- */}
+              {/* ============================================================================ */}
+            {/* 📌 2. หน้าแรก (Home View) */}
+            {/* ============================================================================ */}
+            {currentView === 'home' && (
             <motion.div 
               key="grid-view"
               initial={{ opacity: 0, y: 10 }}
@@ -1006,18 +1095,13 @@ ${h.details || '-'}
                     </div>
 
                     <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-5 mb-2">
-                      {categories.map((tab) => {
+                      {categories.filter(tab => tab !== 'ALL').map((tab) => {
                         const isActive = activeCategory === tab;
-                        // Calculate counts
-                        const count = tab === 'ALL' 
-                          ? resourcesData.length 
-                          : resourcesData.filter(i => i.category === tab).length;
+                        const count = resourcesData.filter(i => i.category === tab).length;
                         
-                        // Pick an image
-                        let imgPath = "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1640&auto=format&fit=crop";
-                        if (tab === 'ALL') {
-                          imgPath = "https://i.postimg.cc/8zb4Q7C4/2000x600-20260425003051.png"
-                        } else {
+                        const catData = categoriesData.find(c => c.name === tab);
+                        let imgPath = catData?.imageUrl || "https://images.unsplash.com/photo-1542751371-adc38448a05e?q=80&w=1640&auto=format&fit=crop";
+                        if (!catData) {
                           const match = resourcesData.find(i => i.category === tab);
                           if (match) imgPath = match.imageUrl;
                         }
@@ -1027,18 +1111,16 @@ ${h.details || '-'}
                             key={tab} 
                             tabIndex={0} 
                             onClick={() => { setActiveCategory(tab); setCurrentView('category'); }}
-                            className="cursor-pointer focus:outline-none"
+                            className="cursor-pointer focus:outline-none relative group/cat block transition-transform active:scale-[0.98] rounded-xl overflow-hidden p-[2px]"
                           >
-                            <div className={`group block transition-transform active:scale-[0.98]`}>
-                              <div className={`rounded-lg border p-2 transition-colors ${
-                                isActive 
-                                  ? 'border-brand bg-brand/10 shadow-[0_0_15px_rgba(36,168,235,0.12)]' 
-                                  : 'border-border-subtle bg-bg-app hover:border-brand/80'
-                              }`}>
-                                <div className="relative overflow-hidden rounded-md bg-bg-app aspect-[10/3]">
+                            <div className={`absolute inset-0 z-0 transition-colors ${isActive ? 'bg-brand' : 'bg-border-subtle group-hover/cat:bg-bg-app'}`} />
+                            <div className="absolute inset-[-100%] z-0 animate-[spin_3s_linear_infinite] opacity-0 group-hover/cat:opacity-100 group-active/cat:opacity-100 bg-[conic-gradient(from_0deg,transparent_0_240deg,#3b82f6_280deg_360deg)] transition-opacity duration-300 pointer-events-none" />
+                            <div className="relative z-10 w-full h-full rounded-[calc(12px-2px)] p-2 bg-card-bg">
+                              <div className={`absolute inset-0 -z-10 rounded-[calc(12px-2px)] pointer-events-none transition-colors ${isActive ? 'bg-brand/10 shadow-[0_0_15px_rgba(36,168,235,0.12)]' : ''}`} />
+                              <div className="relative overflow-hidden rounded-md bg-zinc-950 aspect-[1640/500]">
                                   <img 
-                                    className="w-full h-full object-cover rounded-md transition-[opacity,transform] duration-500 ease-out opacity-100 group-hover:scale-[1.02]" 
-                                    alt={tab === 'ALL' ? t('allResources') : tab} 
+                                    className="w-full h-full object-cover rounded-md transition-[opacity,transform] duration-500 ease-out opacity-0 !opacity-100 group-hover:scale-[1.02]" 
+                                    alt={tab} 
                                     draggable="false" 
                                     loading="eager" 
                                     fetchPriority="high"
@@ -1048,22 +1130,22 @@ ${h.details || '-'}
                                 </div>
                                 <div className="mt-3 flex items-start justify-between gap-3 px-1">
                                   <div className="min-w-0">
-                                    <h4 className="text-lg sm:text-lg lg:text-xl font-medium leading-tight line-clamp-1 text-text-main group-hover:text-brand transition-colors">
-                                      {tab === 'ALL' ? t('allResources') : tab}
+                                    <h4 className="text-lg sm:text-xl font-medium leading-tight line-clamp-1 text-text-main group-hover:text-brand transition-colors">
+                                      {tab}
                                     </h4>
                                     <p className="mt-1 text-xs sm:text-sm font-medium text-text-muted line-clamp-1">
-                                      {tab === 'ALL' ? 'รวมสินค้าทั้งหมดในร้าน' : 'การันตีสะอาด 100%'}
+                                      {catData?.description || 'สินค้าหมวดหมู่ ' + tab}
                                     </p>
                                   </div>
                                   <div className="shrink-0 pt-0.5 text-right">
                                     <p className="text-sm font-medium text-text-muted">{count} สินค้า</p>
                                     <div className="mt-1 flex flex-wrap items-center justify-end gap-1">
-                                      {tab === 'ALL' && (
+                                      {(catData?.isRecommended) && (
                                         <span className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand">
                                           <Star className="w-3 h-3 fill-brand text-brand" /> แนะนำ
                                         </span>
                                       )}
-                                      {appStats.downloads >= 100 && (
+                                      {(catData?.isPopular) && (
                                         <span className="inline-flex items-center gap-1 rounded-full border border-brand/40 bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand">
                                           <Flame className="w-3 h-3 fill-brand text-brand" /> ยอดฮิต
                                         </span>
@@ -1073,7 +1155,6 @@ ${h.details || '-'}
                                 </div>
                               </div>
                             </div>
-                          </div>
                         );
                       })}
                     </div>
@@ -1111,14 +1192,19 @@ ${h.details || '-'}
                           exit={{ opacity: 0, scale: 0.95 }}
                           transition={{ duration: 0.2, delay: index * 0.03 }}
                           key={"rec-" + item.id}
-                          onClick={() => handleOpenDetails(item)}
-                          className="relative rounded-md sm:rounded-lg group overflow-hidden cursor-pointer p-0 bg-transparent flex flex-col shadow-sm"
+                          onClick={() => { if (!item.isOutOfStock) handleOpenDetails(item) }}
+                          className={`relative rounded-md sm:rounded-lg group/prod flex flex-col shadow-sm ${item.isOutOfStock ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                         >
-                          <div className="relative flex-1 z-10 bg-card-bg border border-border-subtle group-hover:border-brand transition-colors duration-200 rounded-md sm:rounded-lg p-1.5 sm:p-2 flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.02)] group-hover:shadow-[0_8px_30px_rgba(106,154,251,0.12)]">
+                          {!item.isOutOfStock && (
+                            <div className="absolute inset-[0px] rounded-md sm:rounded-lg overflow-hidden opacity-0 group-hover/prod:opacity-100 group-active/prod:opacity-100 transition-opacity duration-300 pointer-events-none z-0">
+                               <div className="absolute inset-[-100%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_0deg,transparent_0_240deg,#3b82f6_280deg_360deg)]" />
+                            </div>
+                          )}
+                          <div className={`relative flex-1 z-10 bg-card-bg border transition-colors duration-200 rounded-md sm:rounded-lg p-1.5 sm:p-2 flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.02)] ${item.isOutOfStock ? 'grayscale opacity-70 border-transparent' : 'border-border-subtle group-hover/prod:border-transparent group-hover/prod:shadow-[0_8px_30px_rgba(106,154,251,0.12)] bg-clip-padding m-[1px] group-hover/prod:m-[1px]'}`}>
                             
                             {appStats.downloads >= 100 && (
                               <div className="absolute top-1 right-1 z-30 pointer-events-none">
-                                <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-2 py-1 border border-orange-300/40">
+                                <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-2 py-1 border border-orange-300/40 opacity-90">
                                   <Flame className="w-3 h-3 text-white fill-white" />
                                   <span className="text-[10px] sm:text-[11px] font-semibold text-white">ยอดฮิต</span>
                                 </div>
@@ -1127,42 +1213,58 @@ ${h.details || '-'}
 
                             <div className="relative z-20 rounded-md overflow-hidden bg-bg-app aspect-square">
                               <motion.img 
-                                whileHover={{ scale: 1.05 }}
+                                whileHover={!item.isOutOfStock ? { scale: 1.05 } : {}}
                                 transition={{ duration: 0.4 }}
                                 src={item.imageUrl} 
                                 alt={getLocalized(item.title)} 
-                                className="w-full h-full object-cover sm:object-contain object-center transition-opacity duration-500 ease-out" 
+                                className={`w-full h-full object-cover sm:object-contain object-center transition-opacity duration-500 ease-out`} 
                                 referrerPolicy="no-referrer" 
                               />
+                              {item.isOutOfStock && (
+                                <div className="absolute top-0 left-0 w-full h-full bg-black/75 backdrop-blur-[1px] rounded-md flex items-center justify-center z-10">
+                                  <p className="text-white text-sm flex items-center gap-2 font-medium">
+                                    <CircleX className="w-4 h-4" /> สินค้าหมด
+                                  </p>
+                                </div>
+                              )}
                             </div>
                             
-                            <div className="relative z-20 mt-2 flex-1 flex flex-col">
-                              <h3 className="text-sm sm:text-base font-bold text-text-main line-clamp-1 group-hover:text-brand transition-colors">{getLocalized(item.title)}</h3>
-                              <p className="text-[11px] sm:text-xs text-brand line-clamp-1 mt-1 font-medium bg-brand/10 w-fit px-1.5 py-0.5 rounded-md border border-brand/20">
+                            <div className={`relative z-20 mt-2 flex-1 flex flex-col`}>
+                              <h3 className={`text-sm sm:text-base font-bold text-text-main line-clamp-1 transition-colors ${!item.isOutOfStock && 'group-hover/prod:text-brand'}`}>{getLocalized(item.title)}</h3>
+                              <p className={`text-[11px] sm:text-xs line-clamp-1 mt-1 font-medium w-fit px-1.5 py-0.5 rounded-md border ${item.isOutOfStock ? 'bg-zinc-500/10 text-text-muted border-zinc-500/20' : 'bg-brand/10 text-brand border-brand/20'}`}>
                                 ✦ {getLocalized(item.shortDescription) || 'คุณสมบัติพิเศษ'}
                               </p>
                               
                               <div className="flex items-center mt-3 justify-between space-x-2 pt-2 border-t border-border-subtle mt-auto">
-                                <p className="text-xs sm:text-sm font-medium text-text-main inline-flex items-center">
+                                <p className={`text-xs sm:text-sm font-medium inline-flex items-center text-text-main`}>
                                   <span className="text-lg sm:text-xl font-bold leading-none">฿</span>
-                                  <span className="text-lg sm:text-xl font-bold leading-none text-brand ml-[1px]">{item.price && item.price !== 'Free' ? item.price : '0'}</span>
+                                  <span className={`text-lg sm:text-xl font-bold leading-none ml-[1px] ${!item.isOutOfStock && 'text-brand'}`}>{item.price && item.price !== 'Free' ? item.price : '0'}</span>
                                 </p>
                                 <p className="text-[10px] sm:text-[11px] rounded px-1.5 py-0.5 border inline-flex items-center gap-1 border-border-subtle text-text-muted bg-bg-app">
-                                  <Archive className="w-3 h-3 shrink-0" /> คงเหลือ ∞
+                                  <Archive className="w-3 h-3 shrink-0" /> {item.isOutOfStock ? 'คงเหลือ 0' : 'คงเหลือ ∞'}
                                 </p>
                               </div>
                               
                               <div className="flex items-center space-x-2 mt-2">
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleOpenDetails(item); }}
-                                  className="inline-flex shrink-0 items-center justify-center whitespace-nowrap text-sm font-medium outline-none select-none transition-[transform,background-color,color,border-color,box-shadow,opacity] duration-150 py-1.5 px-3 w-full rounded-xl bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] group"
-                                >
-                                  {item.actionType === 'purchase' ? (
-                                     <><ShoppingCart className="w-4 h-4 mr-1.5 shrink-0 [transform:perspective(700px)_rotateY(0deg)] [transform-style:preserve-3d] transition-transform duration-700 group-hover:[transform:perspective(700px)_rotateY(360deg)]" /> สั่งซื้อสินค้า</>
-                                  ) : (
-                                     <><ExternalLink className="w-4 h-4 mr-1.5 shrink-0" /> รับลิงก์ฟรี</>
-                                  )}
-                                </button>
+                                {item.isOutOfStock ? (
+                                  <div className="inline-flex shrink-0 items-center justify-center whitespace-nowrap text-sm font-bold outline-none select-none py-1.5 px-3 w-full rounded-xl bg-zinc-500/10 text-zinc-500 border border-zinc-500/20">
+                                    <CircleX className="w-4 h-4 mr-1.5" /> สินค้าหมด
+                                  </div>
+                                ) : (
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      handleOpenDetails(item); 
+                                    }}
+                                    className="inline-flex shrink-0 items-center justify-center whitespace-nowrap text-sm font-medium outline-none select-none transition-[transform,background-color,color,border-color,box-shadow,opacity] duration-150 py-1.5 px-3 w-full rounded-xl text-white group/btn bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)]"
+                                  >
+                                    {item.actionType === 'purchase' ? (
+                                       <><ShoppingCart className="w-4 h-4 mr-1.5 shrink-0 [transform:perspective(700px)_rotateY(0deg)] [transform-style:preserve-3d] transition-transform duration-700 group-hover/btn:[transform:perspective(700px)_rotateY(360deg)]" /> เลือกซื้อ</>
+                                    ) : (
+                                       <><ExternalLink className="w-4 h-4 mr-1.5 shrink-0" /> รับลิงก์ฟรี</>
+                                    )}
+                                  </button>
+                                )}
                               </div>
 
                               <div className="mt-2.5 flex items-center justify-center">
@@ -1228,14 +1330,19 @@ ${h.details || '-'}
                           exit={{ opacity: 0, scale: 0.95 }}
                           transition={{ duration: 0.2, delay: index * 0.03 }}
                           key={item.id}
-                          onClick={() => handleOpenDetails(item)}
-                          className="relative rounded-md sm:rounded-lg group overflow-hidden cursor-pointer p-0 bg-transparent flex flex-col shadow-sm"
+                          onClick={() => { if (!item.isOutOfStock) handleOpenDetails(item) }}
+                          className={`relative rounded-md sm:rounded-lg group/prod flex flex-col shadow-sm ${item.isOutOfStock ? 'cursor-not-allowed' : 'cursor-pointer'}`}
                         >
-                          <div className="relative flex-1 z-10 bg-card-bg border border-border-subtle group-hover:border-brand transition-colors duration-200 rounded-md sm:rounded-lg p-1.5 sm:p-2 flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.02)] group-hover:shadow-[0_8px_30px_rgba(106,154,251,0.12)]">
+                          {!item.isOutOfStock && (
+                            <div className="absolute inset-[0px] rounded-md sm:rounded-lg overflow-hidden opacity-0 group-hover/prod:opacity-100 group-active/prod:opacity-100 transition-opacity duration-300 pointer-events-none z-0">
+                               <div className="absolute inset-[-100%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_0deg,transparent_0_240deg,#3b82f6_280deg_360deg)]" />
+                            </div>
+                          )}
+                          <div className={`relative flex-1 z-10 bg-card-bg border transition-colors duration-200 rounded-md sm:rounded-lg p-1.5 sm:p-2 flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.02)] ${item.isOutOfStock ? 'grayscale opacity-70 border-transparent' : 'border-border-subtle group-hover/prod:border-transparent group-hover/prod:shadow-[0_8px_30px_rgba(106,154,251,0.12)] bg-clip-padding m-[1px] group-hover/prod:m-[1px]'}`}>
                             
                             {appStats.downloads >= 100 && (
                               <div className="absolute top-1 right-1 z-30 pointer-events-none">
-                                <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-2 py-1 border border-orange-300/40">
+                                <div className="inline-flex items-center gap-1 rounded-full bg-gradient-to-r from-red-500 to-orange-500 px-2 py-1 border border-orange-300/40 opacity-90">
                                   <Flame className="w-3 h-3 text-white fill-white" />
                                   <span className="text-[10px] sm:text-[11px] font-semibold text-white">ยอดฮิต</span>
                                 </div>
@@ -1244,42 +1351,58 @@ ${h.details || '-'}
 
                             <div className="relative z-20 rounded-md overflow-hidden bg-bg-app aspect-square">
                               <motion.img 
-                                whileHover={{ scale: 1.05 }}
+                                whileHover={!item.isOutOfStock ? { scale: 1.05 } : {}}
                                 transition={{ duration: 0.4 }}
                                 src={item.imageUrl} 
                                 alt={getLocalized(item.title)} 
-                                className="w-full h-full object-cover sm:object-contain object-center transition-opacity duration-500 ease-out" 
+                                className={`w-full h-full object-cover sm:object-contain object-center transition-opacity duration-500 ease-out`} 
                                 referrerPolicy="no-referrer" 
                               />
+                              {item.isOutOfStock && (
+                                <div className="absolute top-0 left-0 w-full h-full bg-black/75 backdrop-blur-[1px] rounded-md flex items-center justify-center z-10">
+                                  <p className="text-white text-sm flex items-center gap-2 font-medium">
+                                    <CircleX className="w-4 h-4" /> สินค้าหมด
+                                  </p>
+                                </div>
+                              )}
                             </div>
                             
-                            <div className="relative z-20 mt-2 flex-1 flex flex-col">
-                              <h3 className="text-sm sm:text-base font-bold text-text-main line-clamp-1 group-hover:text-brand transition-colors">{getLocalized(item.title)}</h3>
-                              <p className="text-[11px] sm:text-xs text-brand line-clamp-1 mt-1 font-medium bg-brand/10 w-fit px-1.5 py-0.5 rounded-md border border-brand/20">
+                            <div className={`relative z-20 mt-2 flex-1 flex flex-col`}>
+                              <h3 className={`text-sm sm:text-base font-bold text-text-main line-clamp-1 transition-colors ${!item.isOutOfStock && 'group-hover/prod:text-brand'}`}>{getLocalized(item.title)}</h3>
+                              <p className={`text-[11px] sm:text-xs line-clamp-1 mt-1 font-medium w-fit px-1.5 py-0.5 rounded-md border ${item.isOutOfStock ? 'bg-zinc-500/10 text-text-muted border-zinc-500/20' : 'bg-brand/10 text-brand border-brand/20'}`}>
                                 ✦ {getLocalized(item.shortDescription) || 'คุณสมบัติพิเศษ'}
                               </p>
                               
                               <div className="flex items-center mt-3 justify-between space-x-2 pt-2 border-t border-border-subtle mt-auto">
-                                <p className="text-xs sm:text-sm font-medium text-text-main inline-flex items-center">
+                                <p className={`text-xs sm:text-sm font-medium inline-flex items-center text-text-main`}>
                                   <span className="text-lg sm:text-xl font-bold leading-none">฿</span>
-                                  <span className="text-lg sm:text-xl font-bold leading-none text-brand ml-[1px]">{item.price && item.price !== 'Free' ? item.price : '0'}</span>
+                                  <span className={`text-lg sm:text-xl font-bold leading-none ml-[1px] ${!item.isOutOfStock && 'text-brand'}`}>{item.price && item.price !== 'Free' ? item.price : '0'}</span>
                                 </p>
                                 <p className="text-[10px] sm:text-[11px] rounded px-1.5 py-0.5 border inline-flex items-center gap-1 border-border-subtle text-text-muted bg-bg-app">
-                                  <Archive className="w-3 h-3 shrink-0" /> คงเหลือ ∞
+                                  <Archive className="w-3 h-3 shrink-0" /> {item.isOutOfStock ? 'คงเหลือ 0' : 'คงเหลือ ∞'}
                                 </p>
                               </div>
                               
                               <div className="flex items-center space-x-2 mt-2">
-                                <button 
-                                  onClick={(e) => { e.stopPropagation(); handleOpenDetails(item); }}
-                                  className="inline-flex shrink-0 items-center justify-center whitespace-nowrap text-sm font-medium outline-none select-none transition-[transform,background-color,color,border-color,box-shadow,opacity] duration-150 py-1.5 px-3 w-full rounded-xl bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] group"
-                                >
-                                  {item.actionType === 'purchase' ? (
-                                     <><ShoppingCart className="w-4 h-4 mr-1.5 shrink-0 [transform:perspective(700px)_rotateY(0deg)] [transform-style:preserve-3d] transition-transform duration-700 group-hover:[transform:perspective(700px)_rotateY(360deg)]" /> สั่งซื้อสินค้า</>
-                                  ) : (
-                                     <><ExternalLink className="w-4 h-4 mr-1.5 shrink-0" /> รับลิงก์ฟรี</>
-                                  )}
-                                </button>
+                                {item.isOutOfStock ? (
+                                  <div className="inline-flex shrink-0 items-center justify-center whitespace-nowrap text-sm font-bold outline-none select-none py-1.5 px-3 w-full rounded-xl bg-zinc-500/10 text-zinc-500 border border-zinc-500/20">
+                                    <CircleX className="w-4 h-4 mr-1.5" /> สินค้าหมด
+                                  </div>
+                                ) : (
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      handleOpenDetails(item); 
+                                    }}
+                                    className="inline-flex shrink-0 items-center justify-center whitespace-nowrap text-sm font-medium outline-none select-none transition-[transform,background-color,color,border-color,box-shadow,opacity] duration-150 py-1.5 px-3 w-full rounded-xl text-white group/btn bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)]"
+                                  >
+                                    {item.actionType === 'purchase' ? (
+                                       <><ShoppingCart className="w-4 h-4 mr-1.5 shrink-0 [transform:perspective(700px)_rotateY(0deg)] [transform-style:preserve-3d] transition-transform duration-700 group-hover/btn:[transform:perspective(700px)_rotateY(360deg)]" /> สั่งซื้อสินค้า</>
+                                    ) : (
+                                       <><ExternalLink className="w-4 h-4 mr-1.5 shrink-0" /> รับลิงก์ฟรี</>
+                                    )}
+                                  </button>
+                                )}
                               </div>
 
                               <div className="mt-2.5 flex items-center justify-center">
@@ -1452,7 +1575,7 @@ ${h.details || '-'}
                       {selectedItem.warning && (
                         <div>
                           <h5 className="text-[14px] font-bold flex items-center mb-2.5 text-red-500 gap-2">
-                            <ShieldAlert className="w-4 h-4 text-red-500" /> ข้อควรทราบ
+                            <ShieldAlert className="w-4 h-4 text-red-500" /> Warning
                           </h5>
                           <div className="text-red-500 bg-red-500/5 dark:bg-red-500/10 border border-red-500/20 p-3.5 rounded-[12px] text-[13px] leading-relaxed">
                             <span className="font-semibold">{t('friendlyNote')}</span> {getLocalized(selectedItem.warning)}
@@ -1468,7 +1591,7 @@ ${h.details || '-'}
                             <button 
                               key={idx}
                               onClick={() => handleGetLink(undefined, selectedItem, dl.url)}
-                              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[12px] text-[14px] font-medium transition-all group cursor-pointer w-full py-2.5 px-4 bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white shadow-sm hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98]"
+                              className="inline-flex shrink-0 items-center justify-center whitespace-nowrap text-sm font-medium outline-none select-none transition-[transform,background-color,color,border-color,box-shadow,opacity] duration-150 py-2.5 px-4 w-full rounded-xl bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] group cursor-pointer"
                             >
                               {(!currentUser && (selectedItem.requiresLogin || selectedItem.actionType === 'purchase')) ? (
                                 <>
@@ -1488,7 +1611,7 @@ ${h.details || '-'}
                         <div className="mt-2 text-center">
                           <button 
                             onClick={() => handleGetLink(undefined, selectedItem)}
-                            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[12px] text-[14px] font-medium transition-all group cursor-pointer sm:w-auto w-full py-2.5 px-6 mx-auto bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white shadow-sm hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98]"
+                            className="inline-flex shrink-0 items-center justify-center whitespace-nowrap text-sm font-medium outline-none select-none transition-[transform,background-color,color,border-color,box-shadow,opacity] duration-150 py-2.5 px-6 sm:w-auto w-full mx-auto rounded-xl bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] group cursor-pointer"
                           >
                             {(!currentUser && (selectedItem.requiresLogin || selectedItem.actionType === 'purchase')) ? (
                               <>
@@ -1550,7 +1673,7 @@ ${h.details || '-'}
                 <div className="text-center py-20">
                   <Lock className="w-12 h-12 mx-auto text-text-muted mb-4 opacity-50" />
                   <p className="text-text-muted mb-4">กรุณาเข้าสู่ระบบเพื่อดูประวัติ</p>
-                  <button onClick={() => setAuthModalType('login')} className="bg-brand text-white px-6 py-2 rounded-xl">เข้าสู่ระบบ</button>
+                  <button onClick={() => setAuthModalType('login')} className="inline-flex shrink-0 items-center justify-center whitespace-nowrap text-sm font-medium outline-none select-none transition-[transform,background-color,color,border-color,box-shadow,opacity] duration-150 py-2.5 px-6 rounded-xl bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)]">เข้าสู่ระบบ</button>
                 </div>
               ) : (
                 <div className="bg-card-bg shadow-[0_4px_24px_rgba(0,0,0,0.03)] border border-border-subtle rounded-[24px] overflow-hidden">
@@ -1745,7 +1868,9 @@ ${h.details || '-'}
              </motion.div>
           )}
 
-        </AnimatePresence>
+            </AnimatePresence>
+          } />
+        </Routes>
 
         {/* ========================================================================= */}
         {/* GLOBAL FOOTER */}
@@ -1765,7 +1890,6 @@ ${h.details || '-'}
             </div>
           </div>
         </footer>
-
       </main>
 
       {/* ========================================================================= */}
@@ -1966,8 +2090,8 @@ ${h.details || '-'}
                   disabled={isProcessingOrder}
                   className="flex-1 py-3.5 flex items-center justify-center gap-2 font-semibold transition-all outline-none disabled:opacity-70 disabled:active:scale-100 rounded-xl bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white hover:-translate-y-0.5 hover:brightness-110 active:scale-[0.98] shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)]"
                 >
-                  {isProcessingOrder ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShoppingBag className="w-5 h-5" />}
-                  {isProcessingOrder ? 'กำลังดำเนินการ...' : 'สั่งซื้อทันที'}
+                  {isProcessingOrder ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShoppingBag className="w-5 h-5 shrink-0" />}
+                  <span className="truncate">{isProcessingOrder ? 'รอสักครู่...' : 'สั่งซื้อทันที'}</span>
                 </button>
               </div>
             </motion.div>
@@ -2025,7 +2149,7 @@ ${h.details || '-'}
                 
                 <div className="text-left bg-bg-app border border-border-subtle p-4 rounded-[16px] mt-6 relative group">
                   <div className="text-[12px] font-bold text-text-muted mb-2 uppercase tracking-wider">รายละเอียดสินค้า / ข้อมูล</div>
-                  <pre className="whitespace-pre-wrap font-sans text-[14px] text-text-main">{selectedItem.purchaseDetails || 'ไม่พบรายละเอียด'}</pre>
+                  <pre className="whitespace-pre-wrap break-all overflow-x-auto font-sans text-[14px] text-text-main">{selectedItem.purchaseDetails || 'ไม่พบรายละเอียด'}</pre>
                   
                   <button 
                     onClick={() => {
@@ -2169,10 +2293,12 @@ ${h.details || '-'}
                      </div>
                   ) : (
                      <div className="mx-auto rounded-[8px] overflow-hidden shadow-sm inline-block relative">
-                        <ReCAPTCHA
-                          sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY || "6Lflgr4sAAAAAF8MveDgfE1Va2ImRfynRsLFP1nl"}
-                          onChange={handleVerifyRecaptcha}
-                          theme={theme}
+                        <Turnstile
+                          siteKey={import.meta.env.VITE_TURNSTILE_SITE_KEY || "0x4AAAAAADFFAhm_1PRQij4M"}
+                          onSuccess={handleVerifyRecaptcha}
+                          options={{
+                            theme: theme as any
+                          }}
                         />
                         {(step1Status !== 'completed' || step2Status !== 'completed') && (
                           <div className="absolute inset-0 z-10" onClick={() => alert(t('alertSteps'))}></div>
