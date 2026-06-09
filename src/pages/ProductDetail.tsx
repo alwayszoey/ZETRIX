@@ -10,8 +10,22 @@ const ProductDetail = () => {
 
   useEffect(() => {
     if (id) {
-      const found = resourcesData.find(item => item.id === id);
-      setProduct(found || null);
+      // First try to load from API
+      fetch(`/api/resources/${id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.resource) {
+            setProduct(data.resource);
+          } else {
+            // fallback to local data
+            const found = resourcesData.find(item => item.id === id);
+            setProduct(found || null);
+          }
+        })
+        .catch(() => {
+          const found = resourcesData.find(item => item.id === id);
+          setProduct(found || null);
+        });
     }
   }, [id]);
 

@@ -4,6 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import hpp from "hpp";
 import rateLimit from "express-rate-limit";
+import cookieParser from "cookie-parser";
 import { connectDB } from "./_lib/db.js";
 import authRoutes from "./_lib/auth.js";
 import statsRoutes from "./_lib/stats.js";
@@ -19,6 +20,8 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 app.use(hpp()); // ป้องกัน HTTP Parameter Pollution
+app.use(cookieParser()); // Added cookie-parser
+
 
 // --- 🛡️ 3. Global Rate Limiter ---
 // จำกัด 300 requests ต่อ 15 นาทีต่อ IP เพื่อป้องกัน DDoS เบื้องต้น
@@ -136,12 +139,15 @@ app.patch('/api/admin/resources/:id', isAdmin, async (req: any, res: any) => {
 app.use("/api/auth", abuseLimiter, authRoutes);
 app.use("/api/stats", statsRoutes);
 
+import { secureResourceDetails } from "./_lib/secureResources.js";
+import { verifyAuth } from "./_lib/auth.js";
+
 // Stateless URL signer using HMAC (Original)
 function generateSignedToken(url: string, ip: string) {
   const expires = Date.now() + 5 * 60 * 1000;
   const payload = JSON.stringify({ url, exp: expires });
   const payloadB64 = Buffer.from(payload).toString('base64url');
-  const signature = crypto.createHmac('sha256', process.env.RECAPTCHA_SECRET_KEY || 'default_secret_key_12345')
+  const signature = crypto.createHmac('sha256', process.env.TURNSTILE_SECRET_KEY || 'default_secret_key_12345')
     .update(payloadB64)
     .digest('base64url');
   return `${payloadB64}.${signature}`;
@@ -152,7 +158,7 @@ function verifySignedToken(token: string) {
     const parts = token.split('.');
     if (parts.length !== 2) return null;
     const [payloadB64, signature] = parts;
-    const expectedSig = crypto.createHmac('sha256', process.env.RECAPTCHA_SECRET_KEY || 'default_secret_key_12345')
+    const expectedSig = crypto.createHmac('sha256', process.env.TURNSTILE_SECRET_KEY || 'default_secret_key_12345')
       .update(payloadB64)
       .digest('base64url');
     if (signature !== expectedSig) return null;
@@ -172,8 +178,24 @@ function botDetection(req: express.Request) {
   return true;
 }
 
+// Secure Action Endpoints
+app.post("/api/buy", verifyAuth, abuseLimiter, async (req: any, res: any) => {
+  const { itemId } = req.body;
+  
+  if (!itemId) {
+    return res.status(400).json({ success: false, error: 'Missing item ID' });
+  }
+
+  const secureData = secureResourceDetails[itemId];
+  if (!secureData || !secureData.purchaseDetails) {
+    return res.status(404).json({ success: false, error: 'Item not found or has no purchase details' });
+  }
+
+  return res.json({ success: true, details: secureData.purchaseDetails });
+});
+
 // API Routes (Original)
-app.post("/api/verify-captcha", abuseLimiter, async (req, res) => {
+app.post("/api/verify-captcha", abuseLimiter, async (req: any, res: any) => {
   const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
   if (!botDetection(req)) {
       res.status(403).json({ success: false, error: 'Request blocked by bot detection' });
@@ -186,27 +208,44 @@ app.post("/api/verify-captcha", abuseLimiter, async (req, res) => {
          return;
      }
   }
-  const { token, targetUrl } = req.body;
-  if (!token || !targetUrl) {
-      res.status(400).json({ success: false, error: 'Missing token or target url' });
+  const { token, itemId, linkIndex } = req.body;
+  if (!token || !itemId) {
+      res.status(400).json({ success: false, error: 'Missing token or item ID' });
       return;
   }
+  
+  const secureData = secureResourceDetails[itemId];
+  if (!secureData) {
+      res.status(400).json({ success: false, error: 'Invalid item ID' });
+      return;
+  }
+
+  let targetUrl = '';
+  if (linkIndex !== undefined && linkIndex !== null && secureData.downloadLinks && secureData.downloadLinks[linkIndex]) {
+     targetUrl = secureData.downloadLinks[linkIndex].url;
+  } else if (secureData.link) {
+     targetUrl = secureData.link;
+  } else {
+     res.status(400).json({ success: false, error: 'No link attached to this item' });
+     return;
+  }
+
   if (usedTokens.has(token)) {
       res.status(400).json({ success: false, error: 'Captcha token reused' });
       return;
   }
   usedTokens.add(token);
   try {
-    const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
-    if (recaptchaSecret) {
-      const response = await fetch(`https://www.google.com/recaptcha/api/siteverify`, {
+    const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
+    if (turnstileSecret) {
+      const response = await fetch(`https://challenges.cloudflare.com/turnstile/v0/siteverify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `secret=${recaptchaSecret}&response=${token}&remoteip=${ip}`
+        body: `secret=${turnstileSecret}&response=${token}&remoteip=${ip}`
       });
       const data = await response.json();
       if (!data.success) {
-        res.status(400).json({ success: false, error: 'Captcha verification failed' });
+        res.status(400).json({ success: false, error: 'Turnstile verification failed' });
         return;
       }
     }
@@ -218,7 +257,7 @@ app.post("/api/verify-captcha", abuseLimiter, async (req, res) => {
   res.json({ success: true, key: signedKey, expiresIn: 300 });
 });
 
-app.get("/api/download/:key", (req, res) => {
+app.get("/api/download/:key", (req: any, res: any) => {
   const { key } = req.params;
   const targetUrl = verifySignedToken(key);
   if (!targetUrl) {

@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Routes, Route, useNavigate, useLocation, Link, Navigate } from 'react-router-dom';
+import { About } from './pages/About';
+import { Contact } from './pages/Contact';
 import { 
   Search, ShieldAlert, Download, X, RefreshCcw, LayoutGrid, Layers, 
   Archive, Settings, FileText, Check, Zap, Menu, ArrowLeft, 
@@ -8,24 +11,24 @@ import {
 } from 'lucide-react';
 import { resourcesData, ResourceItem, categoriesData } from './data';
 import { motion, AnimatePresence } from 'motion/react';
-import { Routes, Route, Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import HomePage from './pages/Home';
-import AboutPage from './pages/About';
-import ContactPage from './pages/Contact';
-import ProductDetailPage from './pages/ProductDetail';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { Turnstile } from '@marsidev/react-turnstile';
+
+
+
 import { translations } from './translations';
 import { siteConfig } from './config';
 import { AuthModal } from './AuthModal';
 import { ProfileModal } from './ProfileModal';
+import AdminDashboard from './pages/AdminDashboard';
 
 const EMOTICONS = ['🇹🇭', '🇻🇳', '🎮', '🚀', '✨', '🎁', '🔥', '💖', '👋'];
 
-type ViewState = 'home' | 'details' | 'help' | 'category' | 'history';
+type ViewState = 'home' | 'details' | 'help' | 'category' | 'history' | 'admin';
 type AppLang = 'vi' | 'th';
 
 const StatsCard = ({ icon: Icon, title, value, unit }: { icon: any, title: string, value: string | number, unit: string }) => (
-  <div className="relative overflow-hidden rounded-[16px] sm:rounded-[20px] flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 bg-card-bg border border-border-subtle shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_4px_15px_rgba(0,0,0,0.05)] transition-shadow">
+  <div className="relative overflow-hidden rounded-[16px] sm:rounded-[20px] flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 sm:py-4 bg-card-bg/60 backdrop-blur-md border border-border-subtle shadow-[0_2px_10px_rgba(0,0,0,0.02)] hover:shadow-[0_4px_15px_rgba(0,0,0,0.05)] transition-shadow">
     <div className="absolute -right-2 -bottom-2 pointer-events-none opacity-[0.03] text-brand">
       <Icon className="w-16 h-16 sm:w-20 sm:h-20" />
     </div>
@@ -88,7 +91,7 @@ function PromoPopup() {
             className="relative shadow-2xl rounded-2xl max-w-full"
           >
             <a href="https://discord.gg/hSuBbnwWZY" target="_blank" rel="noopener noreferrer" className="block outline-none ring-offset-2 ring-offset-black focus-visible:ring-2 focus-visible:ring-brand rounded-2xl">
-              <img src={siteConfig.promoPopupImageUrl} alt="Join Discord" className="block w-[500px] h-[500px] max-w-[90vw] max-h-[80vh] object-cover rounded-2xl" />
+              <img src={siteConfig.promoPopupImageUrl} alt="Join Discord" className="block w-[800px] max-w-[90vw] h-auto aspect-square object-contain rounded-2xl" />
             </a>
             
             <button 
@@ -126,6 +129,8 @@ function PromoPopup() {
 // ============================================================================
 export default function App() {
   const navigate = useNavigate();
+  const location = useLocation();
+
   const [lang, setLang] = useState<AppLang | null>(null);
   const [isAppLoading, setIsAppLoading] = useState(true);
 
@@ -143,89 +148,85 @@ export default function App() {
   const [showProfileModal, setShowProfileModal] = useState(false);
 
   // ====== STATS STATES ======
-  const [appStats, setAppStats] = useState(() => {
+  const [appStats, setAppStats] = useState<{ 
+      users: number, views: number, downloads: number, 
+      trustData?: {name: string, users: number}[], 
+      performanceData?: {name: string, score: number}[] 
+  }>(() => {
     try {
       const cached = localStorage.getItem('cachedStats');
       if (cached) return JSON.parse(cached);
     } catch (e) {
       console.error(e);
     }
-    return { users: 0, views: 0, downloads: 0 };
+    return { users: 0, views: 0, downloads: 0, trustData: [], performanceData: [] };
   });
 
 // ── OAuth: รับ token จาก popup (postMessage) ──────────────────────────────
 useEffect(() => {
+  // --- Security Cleanup: Remove old insecure keys from previous versions ---
+  localStorage.removeItem('authToken');
+  sessionStorage.removeItem('authToken');
+  localStorage.removeItem('purchaseDetails'); 
+  // ----------------------------------------------------------------------
+
   const handleOAuthMessage = (event: MessageEvent) => {
     if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
-      const { token, user } = event.data;
-      if (!token || !user) return;
-      localStorage.setItem('authToken', token);
-      setCurrentUser({ id: user.id, username: user.username, email: user.email, avatarUrl: user.avatarUrl });
+      const { user } = event.data;
+      if (!user) return;
+      setCurrentUser({ id: user.id || user._id, username: user.username, email: user.email, avatarUrl: user.avatarUrl, history: user.history });
     }
   };
   window.addEventListener('message', handleOAuthMessage);
   return () => window.removeEventListener('message', handleOAuthMessage);
 }, []);
 
-// ── OAuth: รับ token จาก URL fallback (?token=...) ───────────────────────
+// ── Session Check: Cookies are automatically sent back, so no token fallback needed ──
 useEffect(() => {
   const params = new URLSearchParams(window.location.search);
   const urlToken = params.get('token');
-  if (!urlToken) return;
-  window.history.replaceState({}, document.title, window.location.pathname);
-  localStorage.setItem('authToken', urlToken);
-  fetch('/api/auth/me', {
-    headers: { 'Authorization': `Bearer ${urlToken}` }
-  })
-    .then(res => res.json())
-    .then(data => {
-      if (data.user) {
-        setCurrentUser({ id: data.user._id, username: data.user.username, email: data.user.email, avatarUrl: data.user.avatarUrl });
-      }
-    })
-    .catch(() => localStorage.removeItem('authToken'));
+  if (urlToken) {
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
 }, []);
 
   
   useEffect(() => {
-    // Theme Initializer (Default to Light always on first visit)
+    // Theme Initializer (Default to system preference on first visit)
     const savedTheme = localStorage.getItem('appTheme') as 'light' | 'dark';
     if (savedTheme === 'dark') {
       setTheme('dark');
       document.documentElement.classList.add('dark');
-    } else {
+    } else if (savedTheme === 'light') {
       setTheme('light');
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('appTheme', 'light');
+    } else {
+      // No saved theme, check system preference
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (prefersDark) {
+        setTheme('dark');
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('appTheme', 'dark');
+      } else {
+        setTheme('light');
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('appTheme', 'light');
+      }
     }
 
-    const hasVerifiedEntry = sessionStorage.getItem('hasVerifiedEntry');
-    if (hasVerifiedEntry) {
-      setWelcomeState('done');
-    } else {
-      setWelcomeState('welcome');
-    }
+    setWelcomeState('done'); // Temporarily bypass the welcome screen
 
     // Check Auth Session
-    const localToken = localStorage.getItem('authToken');
-    const sessionToken = sessionStorage.getItem('authToken');
-    const token = localToken || sessionToken;
-    if (token) {
-      fetch('/api/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      .then(res => res.json())
-      .then(data => {
-        if (data.user) {
-          setCurrentUser({ id: data.user._id, username: data.user.username, email: data.user.email, avatarUrl: data.user.avatarUrl });
-        }
-      })
-      .catch(err => {
-        console.error("Session check failed:", err);
-        localStorage.removeItem('authToken');
-        sessionStorage.removeItem('authToken');
-      });
-    }
+    fetch('/api/auth/me')
+    .then(res => res.json())
+    .then(data => {
+      if (data.user) {
+        setCurrentUser({ id: data.user._id, username: data.user.username, email: data.user.email, avatarUrl: data.user.avatarUrl, history: data.user.history });
+      }
+    })
+    .catch(err => {
+      console.error("Session check failed:", err);
+    });
 
     // Fetch initial app stats and setup polling for real-time updates
     const fetchStats = () => {
@@ -233,7 +234,13 @@ useEffect(() => {
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            const newStats = { users: data.users, views: data.views, downloads: data.downloads };
+            const newStats = { 
+                users: data.users, 
+                views: data.views, 
+                downloads: data.downloads,
+                trustData: data.trustData || [],
+                performanceData: data.performanceData || []
+            };
             setAppStats(newStats);
             localStorage.setItem('cachedStats', JSON.stringify(newStats));
           }
@@ -264,16 +271,16 @@ useEffect(() => {
     // Simulate loading to ensure everything is ready
     setTimeout(() => {
       setIsAppLoading(false);
-    }, 1000);
+    }, 1500);
 
     return () => clearInterval(statsInterval);
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('authToken');
-    sessionStorage.removeItem('authToken');
-    setCurrentUser(null);
-    setIsMobileMenuOpen(false);
+    fetch('/api/auth/logout', { method: 'POST' }).then(() => {
+      setCurrentUser(null);
+      setIsMobileMenuOpen(false);
+    });
   };
 
   const toggleTheme = () => {
@@ -298,9 +305,45 @@ useEffect(() => {
   };
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [currentView, setCurrentView] = useState<ViewState>('home');
+  const [_currentView, _setCurrentView] = useState<ViewState | 'about' | 'contact'>('home');
   const [selectedItem, setSelectedItem] = useState<ResourceItem | null>(null);
-  const [activeDownloadUrl, setActiveDownloadUrl] = useState<string | null>(null);
+
+  // Sync route with view
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === '/') _setCurrentView('home');
+    else if (path === '/category') _setCurrentView('category');
+    else if (path.startsWith('/shop/product/')) {
+        const id = path.split('/').pop();
+        const item = resourcesData.find(r => String(r.id) === id);
+        if (item) {
+            setSelectedItem(item);
+            _setCurrentView('details');
+        } else {
+            _setCurrentView('home'); // or 404
+        }
+    }
+    else if (path === '/history') _setCurrentView('history');
+    else if (path === '/help') _setCurrentView('help');
+    else if (path === '/about') _setCurrentView('about');
+    else if (path === '/contact') _setCurrentView('contact');
+    else if (path === '/admin') _setCurrentView('admin');
+  }, [location.pathname]);
+
+  const currentView = _currentView;
+  const setCurrentView = (view: ViewState | 'about' | 'contact', params?: { id?: string | number }) => {
+    if (view === 'home') navigate('/');
+    else if (view === 'category') navigate('/category');
+    else if (view === 'details') navigate('/shop/product/' + (params?.id || selectedItem?.id || ''));
+    else if (view === 'history') navigate('/history');
+    else if (view === 'help') navigate('/help');
+    else if (view === 'about') navigate('/about');
+    else if (view === 'contact') navigate('/contact');
+    else if (view === 'admin') navigate('/admin');
+  };
+
+  const [activeLinkId, setActiveLinkId] = useState<number | null>(null);
+  const [purchasedDetails, setPurchasedDetails] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState('ALL');
   
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -368,10 +411,11 @@ useEffect(() => {
   });
 
   const handleOpenDetails = (item: ResourceItem) => {
-    navigate(`/shop/product/${item.id}`);
+    setSelectedItem(item);
+    setCurrentView('details', { id: String(item.id) });
   };
 
-  const handleGetLink = (e?: React.MouseEvent, item?: ResourceItem, specificLink?: string) => {
+  const handleGetLink = (e?: React.MouseEvent, item?: ResourceItem, linkIndex?: number) => {
     if (e) e.stopPropagation();
     
     // Determine which item we are acting on
@@ -389,9 +433,7 @@ useEffect(() => {
       return;
     }
     
-    // Default to targetItem.link if specificLink is not provided
-    const targetUrl = specificLink || targetItem?.link;
-    setActiveDownloadUrl(targetUrl || null);
+    setActiveLinkId(linkIndex !== undefined ? linkIndex : null);
     
     setStep1Status('idle');
     setStep2Status('idle');
@@ -408,27 +450,44 @@ useEffect(() => {
       if (!selectedItem) return;
       setIsProcessingOrder(true);
 
-      // Simulate a purchase delay or call real payment API if needed
-      setTimeout(async () => {
-         await addHistoryRecord('purchase', selectedItem, selectedItem.purchaseDetails || 'ไม่พบรายละเอียด');
-         
-         // Increment download/sales stat
-         fetch('/api/stats/download', { method: 'POST' })
-           .then(res => res.json())
-           .then(data => {
-             if (data.success) {
-                setAppStats(prev => {
-                  const newStats = { ...prev, downloads: data.downloads };
-                  localStorage.setItem('cachedStats', JSON.stringify(newStats));
-                  return newStats;
-                });
-             }
-           }).catch(err => console.error("Failed to update stat", err));
+      try {
+        const res = await fetch('/api/buy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemId: selectedItem.id })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+           const finalDetails = data.details || 'ไม่พบรายละเอียด';
+           setPurchasedDetails(finalDetails);
+           
+           await addHistoryRecord('purchase', selectedItem, finalDetails);
+           
+           // Increment download/sales stat
+           fetch('/api/stats/download', { method: 'POST' })
+             .then(res => res.json())
+             .then(statData => {
+               if (statData.success) {
+                  setAppStats(prev => {
+                    const newStats = { ...prev, downloads: statData.downloads };
+                    localStorage.setItem('cachedStats', JSON.stringify(newStats));
+                    return newStats;
+                  });
+               }
+             }).catch(err => console.error("Failed to update stat", err));
 
-         setIsProcessingOrder(false);
-         setShowOrderConfirmModal(false);
-         setShowPurchaseSuccessModal(true);
-      }, 1500);
+           setIsProcessingOrder(false);
+           setShowOrderConfirmModal(false);
+           setShowPurchaseSuccessModal(true);
+        } else {
+           alert("Purchase failed: " + data.error);
+           setIsProcessingOrder(false);
+        }
+      } catch (err) {
+        alert("An error occurred processing your purchase.");
+        setIsProcessingOrder(false);
+      }
   };
 
   const handleVerifyRecaptcha = async (token: string | null) => {
@@ -497,7 +556,8 @@ useEffect(() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token,
-          targetUrl: activeDownloadUrl || ''
+          itemId: selectedItem?.id,
+          linkIndex: activeLinkId
         })
       });
 
@@ -530,12 +590,10 @@ useEffect(() => {
   const addHistoryRecord = async (type: 'link' | 'purchase', item: ResourceItem, detailsText: string) => {
     if (!currentUser) return;
     try {
-       const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
        const res = await fetch('/api/auth/history', {
          method: 'POST',
          headers: {
-           'Content-Type': 'application/json',
-           'Authorization': `Bearer ${token}`
+           'Content-Type': 'application/json'
          },
          body: JSON.stringify({
             id: item.id,
@@ -628,7 +686,7 @@ ${h.details || '-'}
         .catch(err => console.error("Failed to increment download:", err));
 
       if (currentUser) {
-         addHistoryRecord('link', selectedItem, activeDownloadUrl || '');
+         addHistoryRecord('link', selectedItem, 'Link Accessed');
       }
 
       window.open(`/api/download/${downloadKey}`, '_blank');
@@ -751,7 +809,10 @@ ${h.details || '-'}
           <AnimatePresence mode="wait">
             {welcomeState === 'welcome' && (
               <motion.div key="welcome" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.1 }}>
-                <h2 className="text-[22px] sm:text-[26px] font-bold text-text-main mb-2 tracking-tight">ยินดีต้อนรับสู่ Zorix Shop</h2>
+                <h2 className="flex flex-col gap-1 font-bold tracking-tight mb-2">
+                  <span className="text-[20px] sm:text-[22px] text-text-main">ยินดีต้อนรับสู่</span>
+                  <span className="text-[32px] sm:text-[40px] font-black uppercase tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 pb-1 drop-shadow-md">ZORIX SHOP</span>
+                </h2>
                 <h2 className="text-[15px] sm:text-[16px] font-normal text-text-muted mb-8 leading-relaxed">
                   ศูนย์รวมซอร์สโค้ดและสคริปต์คุณภาพสูง พร้อมใช้สำหรับโปรเจกต์ของคุณ
                 </h2>
@@ -769,7 +830,7 @@ ${h.details || '-'}
                   disabled={!isTurnstileVerified}
                   className="w-full flex items-center justify-center gap-3 py-4 rounded-[16px] bg-brand hover:brightness-110 border-2 border-transparent text-white transition-all text-[16px] font-bold cursor-pointer shadow-lg shadow-brand/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  เข้าสู่ Zorix Shop <ChevronRight className="w-5 h-5 opacity-80" />
+                  เข้าสู่ ZORIX SHOP <ChevronRight className="w-5 h-5 opacity-80" />
                 </button>
               </motion.div>
             )}
@@ -787,11 +848,39 @@ ${h.details || '-'}
     );
   }
 
-  if (isAppLoading && lang) {
+  if (isAppLoading) {
     return (
-      <div className="fixed inset-0 bg-slate-50 z-[9999] flex flex-col justify-center items-center">
-        <Loader2 className="w-10 h-10 text-brand animate-spin mb-4" />
-        <h2 className="text-slate-700 font-medium text-[16px]">{t('loadingData')}</h2>
+      <div className="fixed inset-0 bg-bg-app z-[9999] flex flex-col justify-center items-center">
+        <motion.div
+           initial={{ opacity: 0, y: 10 }}
+           animate={{ opacity: 1, y: 0 }}
+           transition={{ duration: 0.6, ease: "easeOut" }}
+           className="flex flex-col items-center gap-6 cursor-default"
+        >
+          <div className="relative">
+            {/* Glow effect matching the brand */}
+            <div className="absolute inset-0 bg-brand/30 blur-3xl rounded-full scale-150 animate-pulse" style={{ animationDuration: '3s' }}></div>
+            {/* Logo scaling up and glowing slightly */}
+            <motion.img 
+              initial={{ scale: 0.8 }}
+              animate={{ scale: [0.8, 1, 0.8] }}
+              transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+              src={siteConfig.logoUrl} 
+              alt="Logo" 
+              className="w-20 sm:w-24 h-auto object-contain drop-shadow-xl relative z-10" 
+            />
+          </div>
+          
+          <div className="flex flex-col items-center gap-3 mt-4">
+            <h2 className="text-text-main font-bold tracking-tight text-xl sm:text-2xl flex items-center gap-3">
+              <Loader2 className="w-6 h-6 text-brand animate-spin" />
+              {t('loadingData')}
+            </h2>
+            <p className="text-text-muted text-sm px-6 text-center max-w-[300px]">
+              กำลังเตรียมระบบและการเชื่อมต่อข้อมูลสำหรับคุณ โปรดรอสักครู่
+            </p>
+          </div>
+        </motion.div>
       </div>
     );
   }
@@ -800,9 +889,26 @@ ${h.details || '-'}
   // 📌 RENDER - โครงสร้าง HTML ทั้งหมดของเว็บ
   // ============================================================================
   return (
-      <div className="flex flex-col h-[100dvh] overflow-hidden bg-bg-app text-text-main font-sans selection:bg-brand selection:text-white">
-        
-        <PromoPopup />
+    <div className="relative flex flex-col h-[100dvh] overflow-hidden bg-bg-app text-text-main font-sans selection:bg-brand selection:text-white">
+      
+      {/* Background with Full Image and Gradient Overlay */}
+      <div className="absolute inset-0 pointer-events-none z-0">
+        {/* Full Image */}
+        <div 
+          className="absolute inset-0 opacity-60 dark:opacity-80"
+          style={{
+            backgroundImage: `url('https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3cTJ3d2k5aTJxdW5kOWJnYWo1OWpiN2N0YmowcDRxMWtpMzlvY25taiZlcD12MV9naWZzX3NlYXJjaCZjdD1n/8gSh4No47eIGA/giphy.gif')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+          }}
+        />
+        {/* Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-b from-bg-app/50 via-bg-app/80 to-bg-app" />
+        <div className="absolute inset-0 bg-gradient-to-br from-transparent to-brand/10" />
+      </div>
+
+      <PromoPopup />
 
       {/* ========================================================================= */}
       {/* TOP NAVBAR */}
@@ -810,22 +916,13 @@ ${h.details || '-'}
       <nav className="sticky top-0 z-40 bg-card-bg/95 backdrop-blur-xl border-b border-border-subtle px-4 sm:px-8 py-3.5 flex items-center justify-between gap-3 shadow-[0_4px_30px_rgba(0,0,0,0.02)]">
         
         {/* Logo Section */}
-        <Link 
-          to="/"
+        <div 
           onClick={() => { setCurrentView('home'); setSelectedItem(null); }} 
           className="flex items-center gap-3 shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
         >
           <img src={siteConfig.logoUrl} alt="Logo" className="h-9 sm:h-10 object-contain drop-shadow-sm" />
-        </Link>
-        
-        {/* Desktop Menu */}
-        <div className="hidden lg:flex items-center gap-6 mx-4">
-          <NavLink to="/" className={({ isActive }) => `text-sm font-bold transition-all hover:text-brand ${isActive ? 'text-brand' : 'text-text-muted'}`}>{t('home')}</NavLink>
-          <NavLink to="/store" className={({ isActive }) => `text-sm font-bold transition-all hover:text-brand ${isActive ? 'text-brand' : 'text-text-muted'}`}>{t('store')}</NavLink>
-          <NavLink to="/about" className={({ isActive }) => `text-sm font-bold transition-all hover:text-brand ${isActive ? 'text-brand' : 'text-text-muted'}`}>{t('aboutUs')}</NavLink>
-          <NavLink to="/contact" className={({ isActive }) => `text-sm font-bold transition-all hover:text-brand ${isActive ? 'text-brand' : 'text-text-muted'}`}>{t('contactUs')}</NavLink>
         </div>
-
+        
         {/* Center Search Bar */}
         <div className="flex-1 max-w-2xl relative mx-auto">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -891,34 +988,30 @@ ${h.details || '-'}
               exit={{ opacity: 0, y: -10 }}
               className="absolute top-[68px] right-0 sm:right-6 w-full sm:w-[280px] bg-card-bg border-b sm:border border-border-subtle sm:rounded-[24px] shadow-2xl z-50 p-4 flex flex-col gap-1.5"
             >
-              <Link 
-                to="/"
+              <button 
                 onClick={() => { setIsMobileMenuOpen(false); setCurrentView('home'); setSelectedItem(null); }} 
                 className="flex items-center gap-3 p-3.5 rounded-[16px] hover:bg-bg-app text-left font-medium text-text-main hover:text-brand transition-colors w-full group"
               >
                 <Home className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> {t('home')}
-              </Link>
-              <Link 
-                to="/store"
-                onClick={() => { setIsMobileMenuOpen(false); setCurrentView('home'); setSelectedItem(null); }} 
+              </button>
+              <button 
+                onClick={() => { setIsMobileMenuOpen(false); setCurrentView('about'); setSelectedItem(null); }} 
                 className="flex items-center gap-3 p-3.5 rounded-[16px] hover:bg-bg-app text-left font-medium text-text-main hover:text-brand transition-colors w-full group"
               >
-                <ShoppingBag className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> {t('store') || 'ร้านค้า'}
-              </Link>
-              <Link 
-                to="/about"
-                onClick={() => setIsMobileMenuOpen(false)} 
+                <Users className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> เกี่ยวกับเรา
+              </button>
+              <button 
+                onClick={() => { setIsMobileMenuOpen(false); setCurrentView('contact'); setSelectedItem(null); }} 
                 className="flex items-center gap-3 p-3.5 rounded-[16px] hover:bg-bg-app text-left font-medium text-text-main hover:text-brand transition-colors w-full group"
               >
-                <HelpCircle className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> {t('aboutUs')}
-              </Link>
-              <Link 
-                to="/contact"
-                onClick={() => setIsMobileMenuOpen(false)} 
+                <MessageSquare className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> ติดต่อเรา
+              </button>
+              <button 
+                onClick={() => { setIsMobileMenuOpen(false); setCurrentView('help'); setSelectedItem(null); }} 
                 className="flex items-center gap-3 p-3.5 rounded-[16px] hover:bg-bg-app text-left font-medium text-text-main hover:text-brand transition-colors w-full group"
               >
-                <MessageSquare className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> {t('contactUs')}
-              </Link>
+                <HelpCircle className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> {t('help')}
+              </button>
               <button 
                 onClick={() => { setIsMobileMenuOpen(false); setShowSocialsModal(true); }} 
                 className="flex items-center gap-3 p-3.5 rounded-[16px] hover:bg-bg-app text-left font-medium text-text-main hover:text-brand transition-colors w-full group"
@@ -931,6 +1024,15 @@ ${h.details || '-'}
               >
                 <MessageSquare className="w-5 h-5 text-text-muted group-hover:text-brand transition-colors" /> {t('feedbackMenu')}
               </button>
+
+              {currentUser?.email?.toLowerCase() === 'cpjustink@gmail.com' && (
+                <button 
+                  onClick={() => { setIsMobileMenuOpen(false); setCurrentView('admin'); setSelectedItem(null); }} 
+                  className="flex items-center gap-3 p-3.5 rounded-[16px] hover:bg-brand/10 text-left font-medium text-brand transition-colors w-full group mb-2"
+                >
+                  <Settings className="w-5 h-5 text-brand" /> แดชบอร์ดแอดมิน
+                </button>
+              )}
               
               <div className="h-px bg-border-subtle w-full mb-1"></div>
 
@@ -995,22 +1097,27 @@ ${h.details || '-'}
       {/* ========================================================================= */}
       {/* MAIN CONTENT AREA */}
       {/* ========================================================================= */}
-      <main className="flex-1 overflow-y-auto w-full relative">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/contact" element={<ContactPage />} />
-          <Route path="/shop/product/:id" element={<ProductDetailPage />} />
-          <Route path="/store" element={
-            <AnimatePresence mode="wait">
-              
-              {/* ---------------------------------------------------- */}
-              {/* PAGE 1: RESOURCES GRID */}
-              {/* ---------------------------------------------------- */}
-              {/* ============================================================================ */}
-            {/* 📌 2. หน้าแรก (Home View) */}
-            {/* ============================================================================ */}
-            {currentView === 'home' && (
+      <main className="flex-1 overflow-y-auto w-full relative z-10">
+        <AnimatePresence mode="wait">
+          
+          {/* ---------------------------------------------------- */}
+          {/* PAGE: ABOUT/CONTACT PAGES */}
+          {/* ---------------------------------------------------- */}
+          {currentView === 'about' && <About />}
+          {currentView === 'contact' && <Contact />}
+          {currentView === 'admin' && (
+            currentUser?.email?.toLowerCase() === 'cpjustink@gmail.com' ? 
+            <AdminDashboard token={localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || ''} /> : 
+            <div className="flex items-center justify-center h-full"><h2 className="text-xl font-bold p-12">Access Denied</h2></div>
+          )}
+
+          {/* ---------------------------------------------------- */}
+          {/* PAGE 1: RESOURCES GRID */}
+          {/* ---------------------------------------------------- */}
+          {/* ============================================================================ */}
+        {/* 📌 2. หน้าแรก (Home View) */}
+        {/* ============================================================================ */}
+        {currentView === 'home' && (
             <motion.div 
               key="grid-view"
               initial={{ opacity: 0, y: 10 }}
@@ -1019,16 +1126,48 @@ ${h.details || '-'}
               transition={{ duration: 0.2 }}
               className="max-w-[1600px] mx-auto px-4 sm:px-8 py-8 w-full"
             >
-              <div className="mb-6 sm:mb-8">
-                <h1 className="text-[20px] sm:text-[24px] lg:text-[28px] font-semibold text-slate-900 m-0 leading-tight tracking-tight">{t('welcomeTitle')}</h1>
-                <p className="text-slate-500 text-[13px] sm:text-[14px] mt-1.5 font-normal mb-5 leading-relaxed max-w-2xl">{t('welcomeDesc')}</p>
+              <div className="mb-6 sm:mb-12">
+                
+                {/* 🌟 PREMIUM WELCOME BANNER 🌟 */}
+                <motion.div 
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-50px" }}
+                  transition={{ duration: 0.7, ease: "easeOut" }}
+                  className="relative pb-8 sm:pb-12 pt-4 mb-4 sm:mb-8 flex flex-col items-start text-left"
+                >
+                  <div className="flex flex-col gap-2 sm:gap-3 relative z-10 max-w-4xl">
+                    <h1 className="flex flex-col gap-1 font-black tracking-tight leading-[1.1] m-0 drop-shadow-sm">
+                      <span className="text-[28px] sm:text-[36px] lg:text-[44px] text-text-main">ยินดีต้อนรับสู่</span>
+                      <span className="text-[44px] sm:text-[60px] lg:text-[84px] uppercase font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 pb-2 drop-shadow-lg drop-shadow-[0_4px_10px_rgba(59,130,246,0.2)]">ZORIX SHOP</span>
+                    </h1>
+                    <h2 className="text-[18px] sm:text-[24px] lg:text-[30px] font-bold text-text-main leading-[1.3] m-0 mt-2">
+                      ศูนย์รวมซอร์สโค้ดเว็บไซต์, สคริปต์เกม, และคอนฟิกระบบคุณภาพเยี่ยม
+                    </h2>
+                    <p className="text-[15px] sm:text-[18px] lg:text-[20px] font-medium text-text-muted leading-[1.6] m-0 mt-1 sm:mt-2">
+                      พร้อมทีมงานซัพพอร์ตตลอดการใช้งาน เลือกชมสินค้าหน้าเว็บได้เลย!
+                    </p>
+                  </div>
+
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true }}
+                    transition={{ delay: 0.5, duration: 0.4 }}
+                    className="mt-10 flex gap-4"
+                  >
+                     <button onClick={() => { setActiveCategory('ALL'); setCurrentView('category'); window.scrollTo({ top: 500, behavior: 'smooth' }); }} className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white font-bold py-3.5 px-10 rounded-full shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] hover:scale-105 active:scale-95 transition-all text-lg">
+                       <ShoppingBag className="w-5 h-5" /> ช้อปเลย
+                     </button>
+                  </motion.div>
+                </motion.div>
                 
                 {/* Promotional Banner */}
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.98 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ duration: 0.4, delay: 0.1 }}
-                  className="w-full mb-6 rounded-[16px] sm:rounded-[20px] overflow-hidden shadow-sm border border-slate-100 bg-white relative shiny-effect"
+                  className="w-full mb-6 rounded-[16px] sm:rounded-[20px] overflow-hidden shadow-sm border border-border-subtle bg-card-bg relative shiny-effect"
                 >
                   <img 
                     alt="Carousel" 
@@ -1075,24 +1214,35 @@ ${h.details || '-'}
                   />
                 </motion.div>
 
-                <section className="relative -mt-px flex flex-col items-center overflow-hidden bg-card-bg px-3 pt-4 pb-8 w-[100vw] ml-[calc(-50vw+50%)] border-t border-border-subtle transition-colors duration-300">
+                <section className="relative -mt-px flex flex-col items-center overflow-hidden bg-card-bg/30 backdrop-blur-[8px] px-3 pt-4 pb-8 w-[100vw] ml-[calc(-50vw+50%)] border-t border-border-subtle transition-colors duration-300">
                   <div className="w-full max-w-[1600px] relative mx-auto">
-                    <div className="mt-2 flex items-center justify-between space-x-2">
+                    <motion.div 
+                      initial={{ opacity: 0, x: -20 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.5 }}
+                      className="mt-2 flex items-center justify-between space-x-2"
+                    >
                       <div>
                         <h3 className="font-semibold text-xl sm:text-2xl text-text-main">หมวดหมู่ที่คุณอาจสนใจ</h3>
                         <p className="text-sm text-text-muted mt-1 inline-flex items-center gap-1.5">
                           <Star className="w-4 h-4 text-brand fill-brand" /> แนะนำหมวดหมู่ยอดฮิต
                         </p>
                       </div>
-                      <div>
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        whileInView={{ opacity: 1, x: 0 }}
+                        viewport={{ once: true }}
+                        transition={{ duration: 0.5, delay: 0.2 }}
+                      >
                         <button 
                           onClick={() => { setActiveCategory('ALL'); setCurrentView('category'); }}
                           className="inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap text-sm font-medium outline-none select-none transition-all duration-150 ease-out hover:-translate-y-px active:scale-[0.98] bg-brand/15 text-brand border border-brand/40 hover:opacity-90 h-9 px-4 py-2 rounded-xl cursor-pointer"
                         >
                           <LayoutGrid className="w-4 h-4" /> ดูทั้งหมด
                         </button>
-                      </div>
-                    </div>
+                      </motion.div>
+                    </motion.div>
 
                     <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-5 mb-2">
                       {categories.filter(tab => tab !== 'ALL').map((tab) => {
@@ -1107,17 +1257,21 @@ ${h.details || '-'}
                         }
 
                         return (
-                          <div 
+                          <motion.div 
+                            initial={{ opacity: 0, y: 30 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            viewport={{ once: true, margin: "-20px" }}
+                            transition={{ duration: 0.5, ease: "easeOut" }}
                             key={tab} 
                             tabIndex={0} 
                             onClick={() => { setActiveCategory(tab); setCurrentView('category'); }}
-                            className="cursor-pointer focus:outline-none relative group/cat block transition-transform active:scale-[0.98] rounded-xl overflow-hidden p-[2px]"
+                            className="cursor-pointer focus:outline-none relative group/cat block transition-transform active:scale-[0.98] rounded-[20px] overflow-hidden p-[2px]"
                           >
                             <div className={`absolute inset-0 z-0 transition-colors ${isActive ? 'bg-brand' : 'bg-border-subtle group-hover/cat:bg-bg-app'}`} />
                             <div className="absolute inset-[-100%] z-0 animate-[spin_3s_linear_infinite] opacity-0 group-hover/cat:opacity-100 group-active/cat:opacity-100 bg-[conic-gradient(from_0deg,transparent_0_240deg,#3b82f6_280deg_360deg)] transition-opacity duration-300 pointer-events-none" />
-                            <div className="relative z-10 w-full h-full rounded-[calc(12px-2px)] p-2 bg-card-bg">
-                              <div className={`absolute inset-0 -z-10 rounded-[calc(12px-2px)] pointer-events-none transition-colors ${isActive ? 'bg-brand/10 shadow-[0_0_15px_rgba(36,168,235,0.12)]' : ''}`} />
-                              <div className="relative overflow-hidden rounded-md bg-zinc-950 aspect-[1640/500]">
+                            <div className="relative z-10 w-full h-full rounded-[calc(20px-2px)] p-2 bg-card-bg/60 backdrop-blur-[4px]">
+                              <div className={`absolute inset-0 -z-10 rounded-[calc(20px-2px)] pointer-events-none transition-colors ${isActive ? 'bg-brand/10 shadow-[0_0_15px_rgba(36,168,235,0.12)]' : ''}`} />
+                              <div className="relative overflow-hidden rounded-[14px] bg-zinc-950 aspect-[1640/500]">
                                   <img 
                                     className="w-full h-full object-cover rounded-md transition-[opacity,transform] duration-500 ease-out opacity-0 !opacity-100 group-hover:scale-[1.02]" 
                                     alt={tab} 
@@ -1154,7 +1308,7 @@ ${h.details || '-'}
                                   </div>
                                 </div>
                               </div>
-                            </div>
+                            </motion.div>
                         );
                       })}
                     </div>
@@ -1165,32 +1319,44 @@ ${h.details || '-'}
                 {/* RECOMMENDED PRODUCTS SECTION */}
                 {/* ---------------------------------------------------- */}
                 <div className="w-full relative mt-8 pt-6 border-t border-border-subtle">
-                  <div className="flex items-center space-x-2 justify-between">
+                  <motion.div 
+                    initial={{ opacity: 0, x: -20 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.5 }}
+                    className="flex items-center space-x-2 justify-between"
+                  >
                     <div>
                       <h3 className="font-semibold text-xl sm:text-2xl text-text-main line-clamp-1">สินค้าที่คุณอาจสนใจ</h3>
                       <p className="text-xs sm:text-sm text-text-muted mt-1 inline-flex items-center gap-1.5">
                         <Sparkles className="w-4 h-4 text-brand" /> แนะนำสินค้ายอดฮิต
                       </p>
                     </div>
-                    <div>
+                    <motion.div
+                      initial={{ opacity: 0, x: 20 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ duration: 0.5, delay: 0.2 }}
+                    >
                       <button 
                         onClick={() => { setActiveCategory('ALL'); setCurrentView('category'); }}
                         className="inline-flex shrink-0 items-center justify-center whitespace-nowrap font-medium transition-colors duration-150 py-1.5 px-3 text-xs sm:text-sm rounded-xl bg-card-bg text-text-main border border-border-subtle hover:bg-bg-app shadow-sm gap-1.5"
                       >
                         <ShoppingCart className="w-4 h-4" /> ดูทั้งหมด
                       </button>
-                    </div>
-                  </div>
+                    </motion.div>
+                  </motion.div>
 
                   <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-5 pb-12">
                     {resourcesData.slice(0, 5).map((item, index) => {
                        return (
                         <motion.div 
                           layout
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
+                          initial={{ opacity: 0, y: 30 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true, margin: "0px 0px -50px 0px" }}
                           exit={{ opacity: 0, scale: 0.95 }}
-                          transition={{ duration: 0.2, delay: index * 0.03 }}
+                          transition={{ duration: 0.5, ease: "easeOut", delay: (index % 5) * 0.05 }}
                           key={"rec-" + item.id}
                           onClick={() => { if (!item.isOutOfStock) handleOpenDetails(item) }}
                           className={`relative rounded-md sm:rounded-lg group/prod flex flex-col shadow-sm ${item.isOutOfStock ? 'cursor-not-allowed' : 'cursor-pointer'}`}
@@ -1200,7 +1366,7 @@ ${h.details || '-'}
                                <div className="absolute inset-[-100%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_0deg,transparent_0_240deg,#3b82f6_280deg_360deg)]" />
                             </div>
                           )}
-                          <div className={`relative flex-1 z-10 bg-card-bg border transition-colors duration-200 rounded-md sm:rounded-lg p-1.5 sm:p-2 flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.02)] ${item.isOutOfStock ? 'grayscale opacity-70 border-transparent' : 'border-border-subtle group-hover/prod:border-transparent group-hover/prod:shadow-[0_8px_30px_rgba(106,154,251,0.12)] bg-clip-padding m-[1px] group-hover/prod:m-[1px]'}`}>
+                          <div className={`relative flex-1 z-10 bg-card-bg/60 backdrop-blur-md border transition-colors duration-200 rounded-md sm:rounded-lg p-1.5 sm:p-2 flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.02)] ${item.isOutOfStock ? 'grayscale opacity-70 border-transparent' : 'border-border-subtle group-hover/prod:border-transparent group-hover/prod:shadow-[0_8px_30px_rgba(106,154,251,0.12)] bg-clip-padding m-[1px] group-hover/prod:m-[1px]'}`}>
                             
                             {appStats.downloads >= 100 && (
                               <div className="absolute top-1 right-1 z-30 pointer-events-none">
@@ -1279,6 +1445,133 @@ ${h.details || '-'}
                     })}
                   </div>
                 </div>
+
+                {/* ---------------------------------------------------- */}
+                {/* WHY CHOOSE US SECTION */}
+                {/* ---------------------------------------------------- */}
+                <div className="w-full relative mt-2 pt-10 border-t border-border-subtle pb-12">
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    className="text-center mb-10"
+                  >
+                    <h3 className="font-bold text-2xl sm:text-3xl text-text-main mb-3">ทำไมคุณต้องเลือกเรา?</h3>
+                    <p className="text-sm sm:text-base text-text-muted max-w-2xl mx-auto">
+                      สถิติเสียงตอบรับจากผู้ใช้งานจริง ยืนยันถึงคุณภาพและความปลอดภัยที่คุณจะได้รับจาก ZORIX SHOP
+                    </p>
+                  </motion.div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+                    {/* Graph 1: Area Chart */}
+                    <motion.div 
+                      initial={{ opacity: 0, x: -20 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: 0.1, duration: 0.8, type: 'spring', bounce: 0.4 }}
+                      className="bg-card-bg/60 backdrop-blur-md border border-border-subtle rounded-2xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] flex flex-col hover:shadow-lg transition-shadow"
+                    >
+                      <div className="mb-6 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-[12px] bg-brand/10 flex items-center justify-center shrink-0">
+                          <Users className="w-5 h-5 text-brand" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-text-main text-base sm:text-lg">ผู้ใช้งานระบบ (Real-time)</h4>
+                          <p className="text-xs text-text-muted line-clamp-1">จำนวนบัญชีผู้ใช้งานที่ลงทะเบียนในระบบทั้งหมด</p>
+                        </div>
+                      </div>
+                      <div className="h-[240px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={appStats.trustData?.length ? appStats.trustData : [{name: 'Loading', users: 0}]} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-border-subtle opacity-30" vertical={false} />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} className="text-text-muted" />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} className="text-text-muted" />
+                            <Tooltip 
+                              contentStyle={{ backgroundColor: 'var(--color-card-bg)', borderColor: 'var(--color-border-subtle)', borderRadius: '12px', fontSize: '13px' }}
+                              itemStyle={{ color: '#3b82f6', fontWeight: 600 }}
+                            />
+                            <Area type="monotone" dataKey="users" name="จำนวนผู้ใช้" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </motion.div>
+
+                    {/* Graph 2: Bar Chart */}
+                    <motion.div 
+                      initial={{ opacity: 0, x: 20 }}
+                      whileInView={{ opacity: 1, x: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: 0.2, duration: 0.8, type: 'spring', bounce: 0.4 }}
+                      className="bg-card-bg/60 backdrop-blur-md border border-border-subtle rounded-2xl p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] flex flex-col hover:shadow-lg transition-shadow"
+                    >
+                      <div className="mb-6 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-[12px] bg-brand/10 flex items-center justify-center shrink-0">
+                          <ShieldAlert className="w-5 h-5 text-brand" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="font-bold text-text-main text-base sm:text-lg">มาตรฐานและความปลอดภัย</h4>
+                          <p className="text-xs text-text-muted line-clamp-1">สถิติประสิทธิภาพและความคุ้มครองข้อมูล</p>
+                        </div>
+                      </div>
+                      <div className="h-[240px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={appStats.performanceData?.length ? appStats.performanceData : [{name: 'Loading', score: 0}]} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-border-subtle opacity-30" vertical={false} />
+                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} className="text-text-muted" />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12 }} className="text-text-muted" domain={[0, 100]} />
+                            <Tooltip 
+                              cursor={{ fill: 'var(--color-text-muted)', opacity: 0.05 }}
+                              contentStyle={{ backgroundColor: 'var(--color-card-bg)', borderColor: 'var(--color-border-subtle)', borderRadius: '12px', fontSize: '13px' }}
+                              itemStyle={{ color: '#3b82f6', fontWeight: 600 }}
+                            />
+                            <Bar dataKey="score" name="คะแนน (%)" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </motion.div>
+                  </div>
+                </div>
+
+                {/* ---------------------------------------------------- */}
+                {/* CUSTOMER SUPPORT SECTION */}
+                {/* ---------------------------------------------------- */}
+                <div className="w-full relative mt-6 pt-10 border-t border-border-subtle pb-8">
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                    whileInView={{ opacity: 1, scale: 1, y: 0 }}
+                    viewport={{ once: true }}
+                    transition={{ duration: 0.6, type: 'spring', bounce: 0.3 }}
+                    className="bg-card-bg/60 backdrop-blur-md border border-border-subtle rounded-[24px] p-6 lg:p-10 shadow-lg flex flex-col md:flex-row items-center justify-between gap-8 relative overflow-hidden"
+                  >
+                    {/* Background glow for Discord */}
+                    <div className="absolute -right-20 -bottom-20 w-64 h-64 bg-[#5865F2]/20 rounded-full blur-[80px] pointer-events-none"></div>
+                    
+                    <div className="flex-1 text-center md:text-left z-10">
+                      <div className="inline-flex items-center gap-2 mb-4 px-3 py-1.5 rounded-full bg-[#5865F2]/10 text-[#5865F2] font-semibold text-sm">
+                        <MessageCircle className="w-4 h-4" />
+                        Customer Support
+                      </div>
+                      <h3 className="font-bold text-2xl sm:text-3xl text-text-main mb-3">ต้องการความช่วยเหลือ?</h3>
+                      <p className="text-sm sm:text-base text-text-muted max-w-xl mx-auto md:mx-0">
+                        มีทีมงานคอยช่วยเหลือและตอบคำถามผ่านระบบ Ticket ใน Discord ตลอดเวลาทำการ พร้อมอัปเดตข่าวสารและแจ้งเตือนสถานะต่างๆ 
+                      </p>
+                    </div>
+                    
+                    <div className="shrink-0 z-10 w-full md:w-auto">
+                      <a href="https://discord.gg/hSuBbnwWZY" target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-3 bg-[#5865F2] hover:bg-[#4752C4] text-white px-8 py-4 rounded-[16px] font-bold text-lg transition-all shadow-[0_8px_20px_rgba(88,101,242,0.3)] hover:shadow-[0_10px_25px_rgba(88,101,242,0.4)] hover:-translate-y-1 w-full md:w-auto">
+                        <svg viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6"><path d="M20.317 4.3698a19.7913 19.7913 0 00-4.8851-1.5152.0741.0741 0 00-.0785.0371c-.211.3753-.4447.8648-.6083 1.2495-1.8447-.2762-3.68-.2762-5.4868 0-.1636-.3933-.4058-.8742-.6177-1.2495a.077.077 0 00-.0785-.037 19.7363 19.7363 0 00-4.8852 1.515.0699.0699 0 00-.0321.0277C.5334 9.0458-.319 13.5799.0992 18.0578a.0824.0824 0 00.0312.0561c2.0528 1.5076 4.0413 2.4228 5.9929 3.0294a.0777.0777 0 00.0842-.0276c.4616-.6304.8731-1.2952 1.226-1.9942a.076.076 0 00-.0416-.1057c-.6528-.2476-1.2743-.5495-1.8722-.8923a.077.077 0 01-.0076-.1277c.1258-.0943.2517-.1923.3718-.2914a.0743.0743 0 01.0776-.0105c3.9278 1.7933 8.18 1.7933 12.0614 0a.0739.0739 0 01.0785.0095c.1202.099.246.1981.3728.2924a.077.077 0 01-.0066.1276 12.2986 12.2986 0 01-1.873.8914.0766.0766 0 00-.0407.1067c.3604.698.7719 1.3628 1.225 1.9932a.076.076 0 00.0842.0286c1.961-.6067 3.9495-1.5219 6.0023-3.0294a.077.077 0 00.0313-.0552c.5004-5.177-.8382-9.6739-3.5485-13.6604a.061.061 0 00-.0312-.0286zM8.02 15.3312c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9555-2.4189 2.157-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.9555 2.4189-2.1569 2.4189zm7.9748 0c-1.1825 0-2.1569-1.0857-2.1569-2.419 0-1.3332.9554-2.4189 2.1569-2.4189 1.2108 0 2.1757 1.0952 2.1568 2.419 0 1.3332-.946 2.4189-2.1568 2.4189Z"/></svg>
+                        เข้าร่วม Discord ทีมงาน
+                      </a>
+                    </div>
+                  </motion.div>
+                </div>
+
               </div>
             </motion.div>
           )}
@@ -1307,7 +1600,12 @@ ${h.details || '-'}
               </button>
 
               <div className="w-full relative mx-auto border-t border-border-subtle pt-6 transition-colors duration-300">
-                <div className="flex items-center space-x-2 justify-between">
+                <motion.div 
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
+                  className="flex items-center space-x-2 justify-between"
+                >
                   <div>
                     <h3 className="font-semibold text-xl sm:text-2xl text-text-main line-clamp-1">
                       {activeCategory === 'ALL' ? 'สินค้าทั้งหมด' : `หมวดหมู่ : ${activeCategory}`}
@@ -1316,7 +1614,7 @@ ${h.details || '-'}
                       <Star className="w-4 h-4 text-brand fill-brand" /> {filteredResources.length} สินค้าในหมวดหมู่
                     </p>
                   </div>
-                </div>
+                </motion.div>
 
                 <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-5 pb-12">
                   <AnimatePresence mode="popLayout">
@@ -1325,10 +1623,11 @@ ${h.details || '-'}
                        return (
                         <motion.div 
                           layout
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
+                          initial={{ opacity: 0, y: 40 }}
+                          whileInView={{ opacity: 1, y: 0 }}
+                          viewport={{ once: true, margin: "0px 0px -50px 0px" }}
                           exit={{ opacity: 0, scale: 0.95 }}
-                          transition={{ duration: 0.2, delay: index * 0.03 }}
+                          transition={{ duration: 0.5, ease: "easeOut", delay: (index % 5) * 0.05 }}
                           key={item.id}
                           onClick={() => { if (!item.isOutOfStock) handleOpenDetails(item) }}
                           className={`relative rounded-md sm:rounded-lg group/prod flex flex-col shadow-sm ${item.isOutOfStock ? 'cursor-not-allowed' : 'cursor-pointer'}`}
@@ -1338,7 +1637,7 @@ ${h.details || '-'}
                                <div className="absolute inset-[-100%] animate-[spin_3s_linear_infinite] bg-[conic-gradient(from_0deg,transparent_0_240deg,#3b82f6_280deg_360deg)]" />
                             </div>
                           )}
-                          <div className={`relative flex-1 z-10 bg-card-bg border transition-colors duration-200 rounded-md sm:rounded-lg p-1.5 sm:p-2 flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.02)] ${item.isOutOfStock ? 'grayscale opacity-70 border-transparent' : 'border-border-subtle group-hover/prod:border-transparent group-hover/prod:shadow-[0_8px_30px_rgba(106,154,251,0.12)] bg-clip-padding m-[1px] group-hover/prod:m-[1px]'}`}>
+                          <div className={`relative flex-1 z-10 bg-card-bg/60 backdrop-blur-md border transition-colors duration-200 rounded-md sm:rounded-lg p-1.5 sm:p-2 flex flex-col shadow-[0_2px_10px_rgba(0,0,0,0.02)] ${item.isOutOfStock ? 'grayscale opacity-70 border-transparent' : 'border-border-subtle group-hover/prod:border-transparent group-hover/prod:shadow-[0_8px_30px_rgba(106,154,251,0.12)] bg-clip-padding m-[1px] group-hover/prod:m-[1px]'}`}>
                             
                             {appStats.downloads >= 100 && (
                               <div className="absolute top-1 right-1 z-30 pointer-events-none">
@@ -1506,7 +1805,7 @@ ${h.details || '-'}
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                         {/* Product Price */}
                         <div className="flex items-center gap-2">
-                          <span className="text-xl sm:text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600">
+                          <span className="text-xl sm:text-2xl font-bold text-brand">
                             {selectedItem.price ? selectedItem.price : "ฟรี"}
                           </span>
                           {!selectedItem.price && (
@@ -1795,7 +2094,7 @@ ${h.details || '-'}
              >
                <button 
                  onClick={() => setCurrentView('home')}
-                 className="flex items-center gap-2 text-slate-500 hover:text-brand font-medium mb-8 transition-colors group px-2"
+                 className="flex items-center gap-2 text-text-muted hover:text-brand font-medium mb-8 transition-colors group px-2"
                >
                  <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                  {t('backHelp')}
@@ -1859,7 +2158,7 @@ ${h.details || '-'}
                     <p className="text-[14px] text-text-muted mb-6 max-w-sm">{t('feedbackDesc')}</p>
                     <button 
                       onClick={() => setShowFeedbackModal(true)} 
-                      className="px-6 py-2.5 bg-brand text-white font-medium rounded-full hover:shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all w-full sm:w-auto flex items-center justify-center gap-2"
+                      className="px-6 py-2.5 bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white font-medium rounded-full shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] hover:-translate-y-0.5 hover:brightness-110 active:scale-95 transition-all w-full sm:w-auto flex items-center justify-center gap-2"
                     >
                       {t('feedbackTitle')} <ChevronRight className="w-4 h-4" />
                     </button>
@@ -1868,9 +2167,7 @@ ${h.details || '-'}
              </motion.div>
           )}
 
-            </AnimatePresence>
-          } />
-        </Routes>
+        </AnimatePresence>
 
         {/* ========================================================================= */}
         {/* GLOBAL FOOTER */}
@@ -1881,15 +2178,21 @@ ${h.details || '-'}
               <img src={siteConfig.logoUrl} alt="Logo" className="h-6 sm:h-7 object-contain drop-shadow-sm mb-1 opacity-80 mix-blend-multiply" />
               <p className="text-[13px] text-text-muted mt-1">{t('footerDesc')}</p>
             </div>
-            <div className="flex items-center gap-6 text-[13px] font-medium text-text-muted">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 sm:gap-6 text-[13px] font-medium text-text-muted">
+              <button onClick={() => setCurrentView('about')} className="hover:text-brand transition-colors">เกี่ยวกับเรา</button>
+              <button onClick={() => setCurrentView('contact')} className="hover:text-brand transition-colors">ติดต่อเรา</button>
               <button onClick={() => setCurrentView('help')} className="hover:text-brand transition-colors">{t('help')}</button>
               <button onClick={() => setShowSocialsModal(true)} className="hover:text-brand transition-colors">{t('socialsFollow')}</button>
+              {currentUser?.email?.toLowerCase() === 'cpjustink@gmail.com' && (
+                <button onClick={() => setCurrentView('admin')} className="text-pink-500 hover:text-pink-600 font-bold transition-colors">Dashboard</button>
+              )}
             </div>
             <div className="text-[12px] text-text-muted/70">
-              &copy; {new Date().getFullYear()} Zorix Shop. All rights reserved.
+              &copy; {new Date().getFullYear()} ZORIX SHOP. All rights reserved.
             </div>
           </div>
         </footer>
+
       </main>
 
       {/* ========================================================================= */}
@@ -1932,7 +2235,7 @@ ${h.details || '-'}
                <div className="space-y-3">
                  <a href="#" onClick={(e) => { e.preventDefault(); alert(t('fbLink')); }} className="flex items-center gap-4 bg-bg-app hover:bg-brand hover:text-white group p-4 rounded-[16px] transition-all cursor-pointer border border-transparent hover:border-brand">
                    <Facebook className="w-5 h-5 text-[#1877F2] group-hover:text-white transition-colors" />
-                   <span className="font-medium text-text-main group-hover:text-white transition-colors">Zorix Shop Fanpage</span>
+                   <span className="font-medium text-text-main group-hover:text-white transition-colors">ZORIX SHOP Fanpage</span>
                  </a>
                  <a href="#" onClick={(e) => { e.preventDefault(); alert(t('igLink')); }} className="flex items-center gap-4 bg-bg-app hover:bg-brand hover:text-white group p-4 rounded-[16px] transition-all cursor-pointer border border-transparent hover:border-brand">
                    <Instagram className="w-5 h-5 text-[#E4405F] group-hover:text-white transition-colors" />
@@ -2019,7 +2322,7 @@ ${h.details || '-'}
                      }}
                      className={`w-full py-4 rounded-[20px] font-medium text-[15px] transition-all flex items-center justify-center gap-2 ${
                        feedbackText.trim() && feedbackStatus !== 'submitting' 
-                         ? 'bg-brand text-white hover:shadow-xl hover:shadow-brand/30 active:scale-95 cursor-pointer' 
+                         ? 'bg-gradient-to-r from-blue-400 via-blue-500 to-blue-600 text-white shadow-[0_4px_14px_rgba(59,130,246,0.25),inset_0_1px_0_rgba(255,255,255,0.22)] hover:shadow-[0_8px_24px_rgba(59,130,246,0.35),inset_0_1px_0_rgba(255,255,255,0.3)] hover:brightness-110 active:scale-95 cursor-pointer' 
                          : 'bg-bg-app text-text-muted cursor-not-allowed border border-border-subtle'
                      }`}
                    >
@@ -2149,11 +2452,11 @@ ${h.details || '-'}
                 
                 <div className="text-left bg-bg-app border border-border-subtle p-4 rounded-[16px] mt-6 relative group">
                   <div className="text-[12px] font-bold text-text-muted mb-2 uppercase tracking-wider">รายละเอียดสินค้า / ข้อมูล</div>
-                  <pre className="whitespace-pre-wrap break-all overflow-x-auto font-sans text-[14px] text-text-main">{selectedItem.purchaseDetails || 'ไม่พบรายละเอียด'}</pre>
+                  <pre className="whitespace-pre-wrap break-all overflow-x-auto font-sans text-[14px] text-text-main">{purchasedDetails || 'ไม่พบรายละเอียด'}</pre>
                   
                   <button 
                     onClick={() => {
-                        navigator.clipboard.writeText(selectedItem.purchaseDetails || 'ไม่พบรายละเอียด');
+                        navigator.clipboard.writeText(purchasedDetails || 'ไม่พบรายละเอียด');
                         alert('คัดลอกรายละเอียดแล้ว');
                     }}
                     className="absolute top-4 right-4 p-2 bg-card-bg hover:bg-brand/10 text-text-muted hover:text-brand transition-colors rounded-lg border border-border-subtle shadow-sm opacity-0 group-hover:opacity-100"
@@ -2405,12 +2708,8 @@ ${h.details || '-'}
             onClose={() => setAuthModalType(null)}
             t={t}
             onSuccess={(user, token, rememberMe) => {
-              if (rememberMe) {
-                localStorage.setItem('authToken', token);
-              } else {
-                sessionStorage.setItem('authToken', token);
-              }
-              setCurrentUser({ id: user.id, username: user.username, email: user.email, avatarUrl: user.avatarUrl });
+              // State update only; HttpOnly cookies handle auth persistence
+              setCurrentUser({ id: user.id || user._id, username: user.username, email: user.email, avatarUrl: user.avatarUrl, history: user.history });
               setAuthModalType(null);
             }}
           />

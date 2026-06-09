@@ -9,7 +9,7 @@ const JWT_SECRET = process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || "def
 
 // Middleware to verify token for protected routes
 export const verifyAuth = (req: any, res: any, next: any) => {
-  const token = req.headers.authorization?.split(" ")[1];
+  const token = req.cookies?.token || req.headers.authorization?.split(" ")[1];
   if (!token) return res.status(401).json({ error: "Unauthorized" });
 
   try {
@@ -24,25 +24,11 @@ export const verifyAuth = (req: any, res: any, next: any) => {
 // 1. REGISTER =========================================
 router.post("/register", async (req, res) => {
   try {
-    const { username, email, password, recaptchaToken } = req.body;
+    const { username, email, password } = req.body;
     const ip = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'unknown';
 
-    if (!username || !email || !password || !recaptchaToken) {
-      return res.status(400).json({ error: "Missing required fields or reCAPTCHA" });
-    }
-
-    // Verify reCAPTCHA
-    const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
-    if (recaptchaSecret) {
-      const gRes = await fetch(`https://www.google.com/recaptcha/api/siteverify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `secret=${recaptchaSecret}&response=${recaptchaToken}&remoteip=${ip}`
-      });
-      const gData = await gRes.json();
-      if (!gData.success) {
-        return res.status(400).json({ error: "Bot verification failed" });
-      }
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
 
     // Check if user exists
@@ -100,10 +86,17 @@ router.post("/login", async (req, res) => {
       { expiresIn }
     );
 
+    // Set cookie securely
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: rememberMe ? 30 * 24 * 60 * 60 * 1000 : 24 * 60 * 60 * 1000
+    });
+
     res.json({
       success: true,
-      token,
-      user: { id: user._id, username: user.username, email: user.email, avatarUrl: user.avatarUrl }
+      user: { id: user._id, username: user.username, email: user.email, avatarUrl: user.avatarUrl, history: user.history || [] }
     });
   } catch (error) {
     console.error("Login Error:", error);
@@ -120,6 +113,16 @@ router.get("/me", verifyAuth, async (req: any, res) => {
   } catch (err) {
     res.status(500).json({ error: "Server error" });
   }
+});
+
+// 3.2 LOGOUT ==========================================
+router.post("/logout", (req: any, res) => {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict"
+  });
+  res.json({ success: true, message: "Logged out successfully" });
 });
 
 // 3.5 UPDATE CURRENT USER =============================
@@ -155,6 +158,13 @@ router.get("/google/callback", passport.authenticate("google", { session: false,
     { expiresIn: "7d" }
   );
 
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  });
+
   // Use a popup callback HTML to send the token back via postMessage then close
   res.send(`
     <html>
@@ -162,11 +172,11 @@ router.get("/google/callback", passport.authenticate("google", { session: false,
       <body>
         <script>
           if (window.opener) {
-            window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', token: '${token}', user: ${JSON.stringify({ id: user._id, username: user.username, email: user.email })} }, '*');
+            window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', user: ${JSON.stringify({ id: user._id, username: user.username, email: user.email, avatarUrl: user.avatarUrl, history: user.history || [] })} }, '*');
             window.close();
           } else {
             // Fallback if not opened in popup
-            window.location.href = '/?token=${token}';
+            window.location.href = '/';
           }
         </script>
         <p>Authentication successful! Please wait...</p>
@@ -186,22 +196,53 @@ router.get("/discord/callback", passport.authenticate("discord", { session: fals
     { expiresIn: "7d" }
   );
 
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000
+  });
+
   res.send(`
     <html>
       <head><title>Authentication Successful</title></head>
       <body>
         <script>
           if (window.opener) {
-            window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', token: '${token}', user: ${JSON.stringify({ id: user._id, username: user.username, email: user.email })} }, '*');
+            window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS', user: ${JSON.stringify({ id: user._id, username: user.username, email: user.email, avatarUrl: user.avatarUrl, history: user.history || [] })} }, '*');
             window.close();
           } else {
-            window.location.href = '/?token=${token}';
+            window.location.href = '/';
           }
         </script>
         <p>Authentication successful! Please wait...</p>
       </body>
     </html>
   `);
+});
+
+router.post("/history", verifyAuth, async (req: any, res: any) => {
+  try {
+    const userId = req.user.id || req.user._id;
+    const { id, type, title, details, price } = req.body;
+    
+    if (!id || !title || !type) {
+        return res.status(400).json({ error: "Missing required fields" });
+    }
+    
+    const user = await (User as any).findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+    
+    if (!user.history) user.history = [];
+    user.history.push({
+        id, type, title, details, price, date: new Date()
+    });
+    
+    await user.save();
+    res.json({ success: true, history: user.history });
+  } catch (error: any) {
+    res.status(500).json({ error: "Internal error" });
+  }
 });
 
 export default router;

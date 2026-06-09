@@ -1,80 +1,59 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Mail, MessageSquare, MapPin, Send } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Facebook, Instagram } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { siteConfig } from '../config';
 
-const Contact = () => {
+export function Contact() {
+  const navigate = useNavigate();
+
   return (
     <motion.div 
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 1.05 }}
-      className="max-w-4xl mx-auto py-12 px-4"
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ duration: 0.2 }}
+      className="max-w-[1000px] mx-auto px-5 sm:px-8 py-6 sm:py-8 w-full"
     >
-      <h1 className="text-4xl font-bold text-text-main mb-8">ติดต่อเรา</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-        <div className="space-y-6">
-          <p className="text-lg text-text-muted mb-8">
-            มีคำถามหรือต้องการความช่วยเหลือ? ทีมงานของเราพร้อมตอบกลับคุณโดยเร็วที่สุด
+      <button 
+        onClick={() => navigate('/')}
+        className="flex items-center gap-2 text-text-muted hover:text-brand font-medium mb-8 transition-colors group px-2"
+      >
+        <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+        กลับไปหน้าแรก
+      </button>
+
+      <div className="bg-card-bg shadow-sm border border-border-subtle rounded-2xl overflow-hidden p-8 text-center text-text-main">
+          <MessageSquare className="w-16 h-16 text-brand mx-auto mb-4 opacity-80" />
+          <h1 className="text-3xl font-bold mb-4 tracking-tight">ติดต่อเรา (Contact Us)</h1>
+          <p className="text-text-muted text-lg leading-relaxed max-w-2xl mx-auto mb-8">
+             หากคุณพบปัญหาในการใช้งาน แจ้งลิงก์เสีย 
+             หรือต้องการสอบถามข้อมูลเพิ่มเติม สามารถติดต่อเราได้ผ่านช่องทางด้านล่างนี้
           </p>
-
-          <div className="flex items-center gap-4 p-4 border border-border-subtle rounded-2xl">
-            <Mail className="text-brand w-6 h-6" />
-            <div>
-              <p className="text-xs text-text-muted uppercase font-bold tracking-wider">Email</p>
-              <p className="text-text-main font-semibold">support@nexspec.io</p>
-            </div>
+          
+          <div className="flex flex-col sm:flex-row justify-center gap-4">
+              {siteConfig.socials?.discord && (
+                <a 
+                  href={siteConfig.socials.discord} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-3 bg-[#5865F2] hover:bg-[#4752C4] text-white py-3 px-6 rounded-xl font-medium transition-colors"
+                >
+                  <MessageSquare className="w-5 h-5" /> Discord ของเรา
+                </a>
+              )}
+              {siteConfig.socials?.facebook && (
+                <a 
+                  href={siteConfig.socials.facebook} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-3 bg-[#1877F2] hover:bg-[#166FE5] text-white py-3 px-6 rounded-xl font-medium transition-colors"
+                >
+                  <Facebook className="w-5 h-5" /> Facebook Page
+                </a>
+              )}
           </div>
-
-          <div className="flex items-center gap-4 p-4 border border-border-subtle rounded-2xl">
-            <MessageSquare className="text-brand w-6 h-6" />
-            <div>
-              <p className="text-xs text-text-muted uppercase font-bold tracking-wider">Discord</p>
-              <p className="text-text-main font-semibold">Join our community</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 p-4 border border-border-subtle rounded-2xl">
-            <MapPin className="text-brand w-6 h-6" />
-            <div>
-              <p className="text-xs text-text-muted uppercase font-bold tracking-wider">Location</p>
-              <p className="text-text-main font-semibold">Bangkok, Thailand</p>
-            </div>
-          </div>
-        </div>
-
-        <form className="bg-card-bg p-8 rounded-3xl border border-border-subtle shadow-sm space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1.5 ml-1">ชื่อของคุณ</label>
-            <input 
-              type="text" 
-              className="w-full px-4 py-3 bg-bg-app border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand/20 focus:border-brand outline-none transition-all"
-              placeholder="กรอกชื่อของคุณ"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1.5 ml-1">อีเมล</label>
-            <input 
-              type="email" 
-              className="w-full px-4 py-3 bg-bg-app border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand/20 focus:border-brand outline-none transition-all"
-              placeholder="your@email.com"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1.5 ml-1">ข้อความ</label>
-            <textarea 
-              rows={4}
-              className="w-full px-4 py-3 bg-bg-app border border-border-subtle rounded-xl focus:ring-2 focus:ring-brand/20 focus:border-brand outline-none transition-all resize-none"
-              placeholder="พิมพ์ข้อความของคุณที่นี่..."
-            ></textarea>
-          </div>
-          <button className="w-full py-4 bg-brand hover:brightness-110 transition-all text-white font-bold rounded-xl flex items-center justify-center gap-2">
-            ส่งข้อความ <Send className="w-4 h-4" />
-          </button>
-        </form>
       </div>
     </motion.div>
   );
-};
-
-export default Contact;
+}
